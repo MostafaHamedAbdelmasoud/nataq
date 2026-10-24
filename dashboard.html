@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Nataq</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="main">
+      <header class="topbar" id="topbar"></header>
+      <div class="content" id="content"></div>
+    </main>
+  </div>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+  <script>
+  (function () {
+    const N = Nataq;
+
+    function render() {
+      const { t, esc, L, icon, avatar } = N;
+      const D = N.db(), u = N.me(), pats = D.patients;
+      const waiting = N.totalWaiting();
+      const ready = pats.filter(N.isReady);
+      const active = pats.filter(p => p.status === 'active').length;
+      const today = N.dayStart(Date.now());
+      let repliesToday = 0;
+      Object.values(D.messages).forEach(list => list.forEach(m => { if (m.from === 'therapist' && m.ts >= today) repliesToday++; }));
+      const h = new Date().getHours();
+      const greet = t(h < 12 ? 'dash.greetMorning' : h < 17 ? 'dash.greetAfternoon' : 'dash.greetEvening', { name: esc(L(u)) });
+
+      // inbox preview: waiting first (oldest waiting first), then newest
+      const convos = pats.filter(p => p.status !== 'inactive' && N.msgsOf(p.id).length)
+        .map(p => ({ p, w: N.waitingOf(p.id), last: N.lastMsg(p.id) }))
+        .sort((a, b) => (b.w.length > 0) - (a.w.length > 0) || (a.w.length ? a.w[0].ts - b.w[0].ts : b.last.ts - a.last.ts))
+        .slice(0, 5);
+
+      const idle = pats.filter(p => p.status === 'active' && Date.now() - N.lastActivity(p) > 4 * 86400000)
+        .sort((a, b) => N.lastActivity(a) - N.lastActivity(b)).slice(0, 4);
+
+      const series = N.activitySeries(14);
+      const S = [{ name: t('chart.attempts'), color: '#5D5FEF', values: series.att }, { name: t('chart.replies'), color: '#14C9A1', values: series.resp }];
+
+      document.getElementById('content').innerHTML = `
+        <div class="welcome-banner">
+          <div>
+            <h1 class="welcome-greet">${greet}</h1>
+            <p class="welcome-desc">${t('dash.welcomeBody', { n: '<strong>' + waiting + '</strong>', m: '<strong>' + ready.length + '</strong>' })}</p>
+          </div>
+          <div class="flex gap-2" style="flex-wrap:wrap">
+            ${N.can('reviewRecordings') ? `<a href="review.html?f=waiting" class="btn btn-light">${icon('play', 'icon-sm')}${t('dash.startReviewing')}</a>` : ''}
+            ${N.can('registerPatients') ? `<a href="patients.html?new=1" class="btn btn-white">${icon('plus', 'icon-sm')}${t('patients.register')}</a>` : ''}
+          </div>
+        </div>
+
+        <div class="stat-grid">
+          <a class="stat" href="patients.html?f=active">
+            <div class="stat-icon indigo">${icon('users')}</div>
+            <div class="stat-label">${t('dash.statActive')}</div><div class="stat-value">${active}</div>
+            <span class="stat-delta flat">${t('dash.ofTotal', { n: pats.length })}</span>
+          </a>
+          <a class="stat" href="review.html?f=waiting">
+            <div class="stat-icon amber">${icon('mic')}</div>
+            <div class="stat-label">${t('status.waiting')}</div><div class="stat-value">${waiting}</div>
+            <span class="stat-delta ${waiting ? 'down' : 'up'}">${waiting ? t('dash.oldest', { t: N.rel(Math.min(...N.db().patients.flatMap(p => N.waitingOf(p.id).map(m => m.ts)))) }) : t('dash.allClear')}</span>
+          </a>
+          <a class="stat" href="patients.html?f=ready">
+            <div class="stat-icon sky">${icon('unlock')}</div>
+            <div class="stat-label">${t('dash.statReady')}</div><div class="stat-value">${ready.length}</div>
+            <span class="stat-delta flat">${t('dash.readyHint')}</span>
+          </a>
+          <a class="stat" href="analytics.html">
+            <div class="stat-icon mint">${icon('check')}</div>
+            <div class="stat-label">${t('dash.statReplies')}</div><div class="stat-value">${repliesToday}</div>
+            <span class="stat-delta up">${t('dash.seeAnalytics')}</span>
+          </a>
+        </div>
+
+        <div class="dash-grid">
+          <div class="stack">
+            <section class="card">
+              <div class="card-head">
+                <div><div class="card-title">${t('nav.review')}</div><div class="text-xs muted mt-2">${t('dash.inboxSub')}</div></div>
+                <a href="review.html" class="btn btn-ghost">${t('dash.openInbox')} ${icon('arrow', 'icon-sm')}</a>
+              </div>
+              <div class="inbox-list">
+                ${convos.length ? convos.map(({ p, w, last }) => `
+                  <a href="review.html?p=${p.id}" class="inbox-row">
+                    ${avatar(p)}
+                    <div style="min-width:0">
+                      <div class="inbox-name-row"><div class="inbox-name">${esc(L(p))}</div><div class="inbox-time">${N.shortTime(last.ts)}</div></div>
+                      <div class="inbox-preview-row">
+                        <div class="inbox-preview">${preview(last)}</div>
+                        ${w.length ? `<span class="inbox-unread waiting" title="${t('status.waiting')}">${w.length}</span>` : ''}${N.unseenTexts(p.id).length ? `<span class="inbox-unread">${N.unseenTexts(p.id).length}</span>` : ''}
+                      </div>
+                    </div>
+                  </a>`).join('') : N.empty('chat', t('review.emptyTitle'), t('review.emptySub'))}
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="card-head">
+                <div><div class="card-title">${t('chart.title')}</div><div class="text-xs muted mt-2">${t('chart.sub14')}</div></div>
+                ${N.legend(S)}
+              </div>
+              <div class="chart-wrap">${N.lineChart({ labels: series.labels, series: S, label: t('chart.title') })}</div>
+            </section>
+          </div>
+
+          <div class="stack">
+            <section class="card">
+              <div class="card-head">
+                <div><div class="card-title">${t('dash.readyTitle')}</div><div class="text-xs muted mt-2">${t('dash.readySub')}</div></div>
+                <span class="badge badge-indigo">${ready.length}</span>
+              </div>
+              ${ready.length ? ready.slice(0, 5).map(p => {
+                const ses = N.sessionsOf(p), last = p.current >= ses.length;
+                return `<div class="list-row">
+                  ${avatar(p, 'avatar-sm')}
+                  <a class="grow" href="patient-detail.html?id=${p.id}"><div class="list-title">${esc(L(p))}</div>
+                  <div class="list-sub">${t('common.sessionOf', { n: p.current, m: ses.length })} · ${esc(L(N.getProgram(p.programId)))}</div></a>
+                  <button class="btn ${N.can('unlockSessions') ? 'btn-primary' : 'btn-secondary is-locked'} btn-sm" data-act="unlock" data-id="${p.id}">
+                    ${icon(N.can('unlockSessions') ? 'unlock' : 'lock', 'icon-sm')}${t(last ? 'pd.finishProgram' : 'pd.unlockNext')}
+                  </button>
+                </div>`; }).join('') : N.empty('unlock', t('dash.readyEmpty'), t('dash.readyEmptySub'))}
+            </section>
+
+            <section class="card">
+              <div class="card-head">
+                <div class="card-title">${t('dash.programsTitle')}</div>
+                <a href="programs.html" class="link text-xs">${t('common.viewAll')}</a>
+              </div>
+              ${D.programs.map(pr => {
+                const n = pats.filter(p => p.programId === pr.id && p.status !== 'inactive').length;
+                const w = pats.filter(p => p.programId === pr.id).reduce((a, p) => a + N.waitingOf(p.id).length, 0);
+                return `<a class="list-row" href="programs.html?open=${pr.id}">
+                  <div class="prog-letter" style="background:${pr.bg};color:${pr.fg}">${pr.letters[0]}</div>
+                  <div class="grow"><div class="list-title">${esc(L(pr))}</div><div class="list-sub">${t('common.nPatients', { n })} · ${t('common.nSessions', { n: pr.sessions.length })}</div></div>
+                  ${w ? N.waitingLabel(w) : ''}
+                </a>`; }).join('')}
+            </section>
+
+            <section class="card">
+              <div class="card-head"><div><div class="card-title">${t('dash.idleTitle')}</div><div class="text-xs muted mt-2">${t('dash.idleSub')}</div></div></div>
+              ${idle.length ? idle.map(p => `
+                <div class="list-row">
+                  ${avatar(p, 'avatar-sm')}
+                  <a class="grow" href="patient-detail.html?id=${p.id}"><div class="list-title">${esc(L(p))}</div><div class="list-sub">${t('dash.lastSeen', { t: N.rel(N.lastActivity(p)) })}</div></a>
+                  ${(() => { const r = N.lastReminder(p.id); return r && r.ts > N.lastActivity(p)
+                    ? `<span class="badge badge-mint" title="${t('dash.remindedTip')}">${icon('check', 'icon-sm')}${t('dash.reminded', { t: N.rel(r.ts) })}</span>`
+                    : `<button class="btn btn-secondary btn-sm" data-act="remind" data-id="${p.id}">${icon('bell', 'icon-sm')}${t('patients.remind')}</button>`; })()}
+                </div>`).join('') : N.empty('check', t('dash.idleEmpty'), '')}
+            </section>
+          </div>
+        </div>`;
+    }
+
+    function preview(m) {
+      const { t, icon } = N;
+      if (m.deleted || (m.from === 'patient' && !N.isAttempt(m))) return N.msgText(m);
+      if (m.from === 'patient') return `<span class="inbox-preview-icon">${icon('mic', 'icon-sm')}</span>${t('review.voiceAttempt')} · ${N.fmtDur(m.dur)} · <span class="ar">${N.esc(m.letter)}</span>`;
+      if (m.from === 'system') return N.sysText(m);
+      return `${t('review.you')}: ${m.type === 'audio' ? t('review.voiceNote') : N.msgText(m)}`;
+    }
+
+    function click(e) {
+      const b = e.target.closest('[data-act]'); if (!b) return;
+      const p = N.getPatient(b.dataset.id); if (!p) return;
+      if (b.dataset.act === 'unlock') {
+        if (!N.need('unlockSessions')) return;
+        const res = N.unlockNext(p.id);
+        N.toast(N.t(res === 'finished' ? 'toast.programFinished' : 'toast.sessionUnlocked'), N.t('toast.patientNotified', { name: N.esc(N.L(p)) }), 'success');
+        N.refreshShell(); render();
+      }
+      if (b.dataset.act === 'remind') { if (N.remindToast(p.id) === 'sent') render(); }
+    }
+
+    N.boot({ shell: 'staff', nav: 'dashboard', title: 'nav.dashboard', roles: ['superadmin', 'assistant'],
+      crumbs: () => [N.t('nav.workspace'), N.t('nav.dashboard')], render, click });
+  })();
+  </script>
+</body>
+</html>

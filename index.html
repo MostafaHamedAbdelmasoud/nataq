@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nataq — overview</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .hero { background: linear-gradient(135deg, #1A2155 0%, #0F1535 60%, #2D1B69 100%); color: #fff; padding: 28px 32px 90px; position: relative; overflow: hidden; }
+    .hero::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse 700px 500px at 70% 30%, rgba(93,95,239,.3), transparent 60%), radial-gradient(ellipse 500px 400px at 20% 80%, rgba(20,201,161,.15), transparent 60%); }
+    .hero > * { position: relative; z-index: 1; }
+    .hero-top { display: flex; justify-content: space-between; align-items: center; max-width: 1140px; margin: 0 auto; }
+    .hero .lang-switch { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.14); margin: 0; }
+    .hero .lang-btn { color: rgba(255,255,255,.65); } .hero .lang-btn.active { background: rgba(255,255,255,.16); color: #fff; box-shadow: none; }
+    .hero-body { max-width: 1140px; margin: 44px auto 0; }
+    .hero h1 { font-size: 40px; margin: 0 0 12px; letter-spacing: -.03em; }
+    .hero p { color: rgba(255,255,255,.7); max-width: 640px; font-size: 15px; line-height: 1.6; margin: 0; }
+    .wrap { max-width: 1140px; margin: -56px auto 60px; padding: 0 32px; position: relative; }
+    @media (max-width: 700px) { .wrap { padding: 0 16px; } .hero { padding: 22px 16px 80px; } .hero h1 { font-size: 28px; } }
+    .role-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    @media (max-width: 900px) { .role-grid { grid-template-columns: 1fr; } }
+    .role-tile { background: var(--surface); border: 1px solid var(--rule); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 20px 40px -24px rgba(15,21,53,.25); }
+    .role-tile h3 { margin: 0; font-size: 16px; }
+    .role-tile p { margin: 0; font-size: 13px; color: var(--ink-3); line-height: 1.55; flex: 1; }
+    .role-tile .who { display: flex; gap: 10px; align-items: center; font-size: 13px; }
+    .sec-title { font-size: 18px; margin: 40px 0 14px; }
+    .screens { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    @media (max-width: 900px) { .screens { grid-template-columns: 1fr; } }
+    .screen { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 14px 16px; display: flex; gap: 12px; align-items: flex-start; }
+    .screen .ic { width: 34px; height: 34px; border-radius: 10px; background: var(--indigo-50); color: var(--indigo-600); display: grid; place-items: center; flex-shrink: 0; }
+    .screen b { font-size: 14px; } .screen div div { font-size: 12px; color: var(--ink-3); margin-top: 2px; line-height: 1.5; }
+    .checklist { background: var(--surface); border: 1px solid var(--rule); border-radius: 16px; padding: 8px 20px; }
+    .checklist li { padding: 10px 0; border-bottom: 1px solid var(--rule); font-size: 14px; line-height: 1.55; }
+    .checklist li:last-child { border-bottom: 0; }
+    .checklist ol { margin: 0; padding-inline-start: 20px; }
+  </style>
+</head>
+<body>
+  <div id="content"></div>
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+  <script>
+  (function () {
+    const N = Nataq;
+    const SCREENS = [
+      ['login.html', 'key', 'ix.sLogin'], ['dashboard.html', 'grid', 'ix.sDash'], ['review.html', 'chat', 'ix.sReview'],
+      ['patients.html', 'users', 'ix.sPatients'], ['patient-detail.html?id=p1', 'eye', 'ix.sDetail'], ['programs.html', 'book', 'ix.sPrograms'],
+      ['analytics.html', 'chart', 'ix.sAnalytics'], ['team.html', 'shield', 'ix.sTeam'], ['patient-home.html', 'home', 'ix.sPHome'], ['patient-chat.html', 'chat', 'ix.sPChat'], ['patient-record.html', 'mic', 'ix.sPRec']
+    ];
+    function render() {
+      const { t, icon, esc, L } = N, D = N.db();
+      const who = { superadmin: N.getMember('u1'), assistant: N.getMember('u2'), patient: N.getPatient('p1') };
+      document.getElementById('content').innerHTML = `
+        <section class="hero">
+          <div class="hero-top"><div class="brand plain" style="display:flex;gap:10px;align-items:center"><div class="brand-mark">ن</div><div class="brand-name" style="color:#fff">${t('brand.name')}</div></div>
+            <div class="lang-switch"><button class="lang-btn ${N.getLang() === 'en' ? 'active' : ''}" data-lang="en">EN</button><button class="lang-btn ar ${N.getLang() === 'ar' ? 'active' : ''}" data-lang="ar">العربية</button></div></div>
+          <div class="hero-body"><h1>${t('ix.title')}</h1><p>${t('ix.sub')}</p></div>
+        </section>
+        <div class="wrap">
+          <div class="role-grid">
+            ${['superadmin', 'assistant', 'patient'].map(r => `<div class="role-tile">
+              <div>${N.roleBadge(r)}</div>
+              <h3>${t('ix.' + r)}</h3>
+              <p>${t('ix.' + r + 'Desc')}</p>
+              <div class="who">${N.avatar(who[r], 'avatar-sm')}<span>${esc(L(who[r]))}</span></div>
+              <button class="btn btn-primary" data-as="${r}" style="justify-content:center">${icon('arrow', 'icon-sm')}${t('ix.enterAs', { r: t('role.' + r) })}</button>
+            </div>`).join('')}
+          </div>
+
+          <h2 class="sec-title">${t('ix.tryTitle')}</h2>
+          <div class="checklist"><ol>${[1, 2, 3, 4, 5, 6, 7].map(i => `<li>${t('ix.try' + i)}</li>`).join('')}</ol></div>
+
+          <h2 class="sec-title">${t('ix.screens')}</h2>
+          <div class="screens">${SCREENS.map(([h, ic, k]) => `<a class="screen" href="${h}"><div class="ic">${icon(ic, 'icon-sm')}</div><div><b>${t(k)}</b><div>${t(k + 'D')}</div></div></a>`).join('')}</div>
+
+          <h2 class="sec-title">${t('ix.dataTitle')}</h2>
+          <div class="card card-body flex items-center justify-between gap-4" style="flex-wrap:wrap">
+            <div class="text-sm" style="color:var(--ink-2);max-width:700px;line-height:1.6">${t('ix.dataBody', { p: D.patients.length, t: D.team.length, w: N.totalWaiting() })}</div>
+            <button class="btn btn-secondary" data-reset>${icon('refresh', 'icon-sm')}${t('auth.reset')}</button>
+          </div>
+        </div>`;
+    }
+    function click(e) {
+      const b = e.target.closest('[data-as]'); if (!b) return;
+      const r = b.dataset.as, id = { superadmin: 'u1', assistant: 'u2', patient: 'p1' }[r];
+      const acc = r === 'patient' ? N.getPatient(id) : N.getMember(id);
+      if (!acc || acc.active === false || acc.status === 'inactive') { N.toast(N.t('auth.deactivated'), N.t('auth.deactivatedBody'), 'error'); return; }
+      N.signIn(r, id);
+      N.flash(N.t('login.welcome', { name: N.L(acc) }), N.t('role.' + r), 'success');
+      location.href = N.homeFor(r);
+    }
+    N.boot({ title: 'ix.title', render, click });
+  })();
+  </script>
+</body>
+</html>

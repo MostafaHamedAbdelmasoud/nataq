@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Patients — Nataq</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .prog-opt { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .prog-opt label { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 10px; font-size: 13px; cursor: pointer; }
+    .prog-opt input { accent-color: var(--indigo); }
+    .prog-opt label:has(input:checked) { border-color: var(--indigo); background: var(--indigo-50); }
+    .prog-opt .prog-letter { width: 26px; height: 26px; font-size: 13px; border-radius: 7px; }
+    .table .user-cell:hover .user-cell-name { color: var(--indigo-600); }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="main">
+      <header class="topbar" id="topbar"></header>
+      <div class="content" id="content"></div>
+    </main>
+  </div>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+  <script>
+  (function () {
+    const N = Nataq;
+    const PER = 8;
+    const FILTERS = ['all', 'waiting', 'ready', 'active', 'paused', 'finished', 'inactive'];
+    const st = { q: '', filter: FILTERS.includes(N.param('f')) ? N.param('f') : 'all', page: 1 };
+
+    function matches(p, f) {
+      if (f === 'all') return true;
+      if (f === 'waiting') return p.status !== 'inactive' && N.waitingOf(p.id).length > 0;
+      if (f === 'ready') return N.isReady(p);
+      return p.status === f;
+    }
+    function filtered() {
+      const q = st.q.trim().toLowerCase(), qd = N.digits(q);
+      return N.db().patients.filter(p => matches(p, st.filter) && (!q || p.en.toLowerCase().includes(q) || p.ar.includes(st.q.trim()) || (qd.length > 2 && N.digits(p.phone).includes(qd))))
+        .sort((a, b) => N.lastActivity(b) - N.lastActivity(a));
+    }
+
+    function render() {
+      const { t, icon } = N;
+      const D = N.db();
+      document.getElementById('content').innerHTML = `
+        <div class="page-head">
+          <div><h1 class="page-title">${t('nav.patients')}</h1>
+            <p class="page-sub">${t('patients.sub', { a: D.patients.filter(p => p.status === 'active').length, w: D.patients.filter(p => matches(p, 'waiting')).length, r: D.patients.filter(N.isReady).length })}</p></div>
+          <div class="page-actions">
+            <button class="btn btn-secondary" data-act="export">${icon('download', 'icon-sm')}${t('common.export')}</button>
+            <button class="btn ${N.can('registerPatients') ? 'btn-primary' : 'btn-secondary is-locked'}" data-act="register">${icon(N.can('registerPatients') ? 'plus' : 'lock', 'icon-sm')}${t('patients.register')}</button>
+          </div>
+        </div>
+        <section class="card">
+          <div class="filters-bar">
+            <label class="scoped-search">${icon('search', 'icon-sm')}<input id="q" type="search" value="${N.esc(st.q)}" placeholder="${t('patients.searchPh')}" aria-label="${t('patients.searchPh')}"></label>
+            <div class="chips" id="chips"></div>
+          </div>
+          <div class="table-wrap"><table class="table">
+            <thead><tr>
+              <th>${t('col.patient')}</th><th>${t('col.program')}</th><th>${t('col.progress')}</th><th>${t('col.recordings')}</th><th>${t('col.lastActivity')}</th><th>${t('col.status')}</th><th></th>
+            </tr></thead>
+            <tbody id="rows"></tbody>
+          </table></div>
+          <div class="pagination" id="pager"></div>
+        </section>`;
+      const q = document.getElementById('q');
+      q.addEventListener('input', () => { st.q = q.value; st.page = 1; renderRows(); });
+      renderRows();
+    }
+
+    function renderRows() {
+      const { t, esc, L, icon, avatar } = N;
+      const D = N.db(), list = filtered();
+      const pages = Math.max(1, Math.ceil(list.length / PER));
+      st.page = Math.min(st.page, pages);
+      document.getElementById('chips').innerHTML = FILTERS.map(f =>
+        `<button class="chip-btn ${st.filter === f ? 'active' : ''}" data-filter="${f}">${t('filter.' + f)} <span class="n">${D.patients.filter(p => matches(p, f)).length}</span></button>`).join('');
+      const slice = list.slice((st.page - 1) * PER, st.page * PER);
+      document.getElementById('rows').innerHTML = slice.length ? slice.map(p => {
+        const pr = N.getProgram(p.programId), ses = N.sessionsOf(p), msgs = N.msgsOf(p.id).filter(N.isAttempt), w = N.waitingOf(p.id).length, v = N.pct(p);
+        return `<tr>
+          <td><a href="patient-detail.html?id=${p.id}" class="user-cell">${avatar(p)}<div class="user-cell-info"><div class="user-cell-name">${esc(L(p))}</div><div class="user-cell-meta"><span dir="ltr">${esc(p.phone)}</span> · ${t('common.age', { n: p.age })}</div></div></a></td>
+          <td><div class="font-semibold">${esc(L(pr))}</div><div class="letters">${pr.letters.map(N.letterChip).join('')}</div></td>
+          <td style="min-width:150px"><div class="flex items-center gap-3"><div style="width:90px">${N.progressBar(v, v === 100 ? 'mint' : p.status === 'inactive' ? 'rose' : '')}</div><span class="text-xs font-semibold">${p.status === 'finished' ? ses.length : p.current} / ${ses.length}</span></div></td>
+          <td><span class="text-sm">${t('patients.sentN', { n: msgs.length })}</span>${w ? `<div class="text-xs" style="color:#B45309;font-weight:600">${t('patients.waitingN', { n: w })}</div>` : ''}</td>
+          <td class="text-sm muted">${N.rel(N.lastActivity(p))}</td>
+          <td>${N.patientBadge(p)}</td>
+          <td><div class="menu-cell">${rowMenu(p)}</div></td>
+        </tr>`; }).join('') : `<tr><td colspan="7">${N.empty('search', t('common.noResults'), t('common.noResultsSub'))}</td></tr>`;
+
+      const from = list.length ? (st.page - 1) * PER + 1 : 0, to = Math.min(st.page * PER, list.length);
+      let btns = '';
+      for (let i = 1; i <= pages; i++) {
+        if (pages > 7 && i > 2 && i < pages - 1 && Math.abs(i - st.page) > 1) { if (!btns.endsWith('…</span>')) btns += '<span class="muted" style="padding:0 4px">…</span>'; continue; }
+        btns += `<button class="page-btn ${i === st.page ? 'active' : ''}" data-page="${i}" aria-label="${t('common.page', { n: i })}">${i}</button>`;
+      }
+      document.getElementById('pager').innerHTML = `
+        <div>${t('common.showing', { a: from, b: to, n: list.length })}</div>
+        <div class="page-controls">
+          <button class="page-btn" data-page="${st.page - 1}" ${st.page <= 1 ? 'disabled' : ''} aria-label="${t('common.prev')}">${icon('back', 'icon-sm')}</button>
+          ${btns}
+          <button class="page-btn" data-page="${st.page + 1}" ${st.page >= pages ? 'disabled' : ''} aria-label="${t('common.next')}">${icon('next', 'icon-sm')}</button>
+        </div>`;
+    }
+
+    function item(act, id, ic, label, perm, danger) {
+      const ok = !perm || N.can(perm);
+      return `<button class="dd-item ${danger ? 'danger' : ''} ${ok ? '' : 'locked'}" data-act="${act}" data-id="${id}" ${perm ? `data-perm="${perm}"` : ''}>${N.icon(ic, 'icon-sm')}<span>${label}</span>${ok ? '' : `<span class="lock-ic">${N.icon('lock', 'icon-sm')}</span>`}</button>`;
+    }
+    function rowMenu(p) {
+      const { t } = N, ses = N.sessionsOf(p);
+      return `<div class="dd row-menu"><button class="btn btn-ghost btn-sm" data-dd aria-label="${t('common.actions')}">${N.icon('dots', 'icon-sm')}</button>
+        <div class="dd-panel">
+          <a class="dd-item" href="patient-detail.html?id=${p.id}">${N.icon('eye', 'icon-sm')}<span>${t('patients.openProfile')}</span></a>
+          ${N.can('reviewRecordings') ? `<a class="dd-item" href="review.html?p=${p.id}">${N.icon('chat', 'icon-sm')}<span>${t('patients.openChat')}</span></a>` : ''}
+          ${p.status !== 'finished' && p.status !== 'inactive' ? item('unlock', p.id, 'unlock', t(p.current >= ses.length ? 'pd.finishProgram' : 'pd.unlockNext'), 'unlockSessions') : ''}
+          ${p.status === 'active' ? item('remind', p.id, 'bell', t('patients.remind')) : ''}
+          <div class="dd-sep"></div>
+          ${p.status === 'active' ? item('pause', p.id, 'pausec', t('patients.pause'), 'editPatients') : p.status === 'paused' ? item('resume', p.id, 'play', t('patients.resume'), 'editPatients') : ''}
+          ${p.status === 'inactive' ? item('activate', p.id, 'usercheck', t('patients.activate'), 'deleteUsers') : item('deactivate', p.id, 'userx', t('patients.deactivate'), 'deleteUsers', true)}
+          ${item('delete', p.id, 'trash', t('common.delete'), 'deleteUsers', true)}
+        </div></div>`;
+    }
+
+    function registerModal() {
+      const { t, esc, L } = N;
+      const progs = N.db().programs;
+      N.modal({
+        side: true, title: t('patients.register'), sub: t('patients.registerSub'),
+        body: `
+          <div class="form-grid">
+            <div class="field"><label>${t('field.nameEn')}</label><input class="input" id="fEn" placeholder="Youssef Adel" dir="ltr"></div>
+            <div class="field"><label>${t('field.nameAr')}</label><input class="input" id="fAr" placeholder="يوسف عادل" dir="rtl"></div>
+          </div>
+          <div class="field"><label>${t('field.phone')}</label><div class="input-group"><div class="input-prefix">+20</div><input class="input" id="fPhone" type="tel" placeholder="10 2345 6789" dir="ltr"></div>
+            <div class="hint">${t('patients.phoneHint')}</div></div>
+          <div class="form-grid">
+            <div class="field"><label>${t('field.age')}</label><input class="input" id="fAge" type="number" min="2" max="99" value="6"></div>
+            <div class="field"><label>${t('field.guardian')}</label><input class="input" id="fGuard" placeholder="${t('field.guardianPh')}"></div>
+          </div>
+          <div class="field"><label>${t('patients.startProgram')}</label><div class="prog-opt">
+            ${progs.map((pr, i) => `<label><input type="radio" name="fProg" value="${pr.id}" ${i === 3 ? 'checked' : ''}><span class="prog-letter" style="background:${pr.bg};color:${pr.fg}">${pr.letters[0]}</span>${esc(L(pr))}</label>`).join('')}
+          </div></div>
+          <div class="field"><label>${t('pd.notesTab')} <span class="muted">(${t('common.optional')})</span></label><textarea class="textarea" id="fNotes" rows="3"></textarea></div>`,
+        actions: [{ label: t('common.cancel') }, { label: N.icon('check', 'icon-sm') + t('patients.register'), kind: 'primary', onClick: el => {
+          const en = el.querySelector('#fEn').value.trim(), ar = el.querySelector('#fAr').value.trim(), ph = N.digits(el.querySelector('#fPhone').value);
+          const age = parseInt(el.querySelector('#fAge').value, 10);
+          if (!en && !ar) { N.fieldError(el, '#fEn', t('val.name')); return false; }
+          if (ph.length < 10 || ph.length > 11) { N.fieldError(el, '#fPhone', t('val.phone')); return false; }
+          if (N.findAccount('patient', ph)) { N.fieldError(el, '#fPhone', t('val.phoneTaken')); return false; }
+          if (!(age >= 2 && age <= 99)) { N.fieldError(el, '#fAge', t('val.age')); return false; }
+          const local = ph.replace(/^0/, '');
+          const g = el.querySelector('#fGuard').value.trim();
+          const p = { id: N.uid('p'), en: en || ar, ar: ar || en, phone: '+20 ' + local.slice(0, 3) + ' ' + local.slice(3, 6) + ' ' + local.slice(6), age,
+            guardian: { en: g, ar: g }, programId: el.querySelector('input[name=fProg]:checked').value, current: 1, status: 'active',
+            color: 1 + Math.floor(Math.random() * 8), notes: el.querySelector('#fNotes').value.trim(), notif: { push: true, inapp: true, sms: false }, history: [], since: Date.now(), notifSeen: Date.now() };
+          N.db().patients.unshift(p); N.msgsOf(p.id);
+          if (!N.save()) return false;
+          N.toast(t('toast.registered'), t('toast.registeredBody', { phone: p.phone, code: N.PATIENT_CODE }), 'success', { label: t('patients.openProfile'), fn: () => { location.href = 'patient-detail.html?id=' + p.id; } });
+          st.filter = 'all'; st.q = ''; st.page = 1; render();
+        } }]
+      });
+    }
+
+    function click(e) {
+      const { t } = N;
+      const f = e.target.closest('[data-filter]'); if (f) { st.filter = f.dataset.filter; st.page = 1; renderRows(); return; }
+      const pg = e.target.closest('[data-page]'); if (pg && !pg.disabled) { st.page = +pg.dataset.page; renderRows(); document.querySelector('.card').scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+      const b = e.target.closest('[data-act]'); if (!b) return;
+      const act = b.dataset.act;
+      document.querySelectorAll('.dd.open').forEach(x => x.classList.remove('open'));
+      if (act === 'export') {
+        const rows = [[t('col.patient'), t('field.phone'), t('field.age'), t('col.program'), t('col.progress'), t('col.status'), t('col.lastActivity')]]
+          .concat(filtered().map(p => [N.L(p), p.phone, p.age, N.L(N.getProgram(p.programId)), N.pct(p) + '%', t('status.' + p.status), new Date(N.lastActivity(p)).toISOString().slice(0, 10)]));
+        N.downloadCSV('nataq-patients.csv', rows);
+        N.toast(t('toast.exported'), t('toast.exportedBody', { n: rows.length - 1 }), 'success'); return;
+      }
+      if (act === 'register') { if (N.need('registerPatients')) registerModal(); return; }
+      if (b.dataset.perm && !N.need(b.dataset.perm)) return;
+      const p = N.getPatient(b.dataset.id); if (!p) return;
+      const name = N.esc(N.L(p));
+      if (act === 'unlock') { const r = N.unlockNext(p.id); N.toast(t(r === 'finished' ? 'toast.programFinished' : 'toast.sessionUnlocked'), t('toast.patientNotified', { name }), 'success'); }
+      if (act === 'remind') { N.remindToast(p.id); return; }
+      if (act === 'pause') { p.status = 'paused'; N.save(); N.toast(t('toast.paused'), name, 'success'); }
+      if (act === 'resume') { p.status = 'active'; N.save(); N.toast(t('toast.resumed'), name, 'success'); }
+      if (act === 'activate') { p.status = 'active'; N.save(); N.toast(t('toast.activated'), name, 'success'); }
+      if (act === 'deactivate') {
+        N.confirmBox({ title: t('patients.deactivateTitle', { name }), body: t('patients.deactivateBody'), yes: t('patients.deactivate'), danger: true,
+          onYes: () => { p.status = 'inactive'; N.save(); N.toast(t('toast.deactivated'), name, 'success'); N.refreshShell(); render(); } });
+        return;
+      }
+      if (act === 'delete') {
+        N.confirmBox({ title: t('patients.deleteTitle', { name }), body: t('patients.deleteBody'), yes: t('common.delete'), danger: true,
+          onYes: () => { const D = N.db(); D.patients = D.patients.filter(x => x.id !== p.id); delete D.messages[p.id]; N.save(); N.toast(t('toast.deleted'), name, 'success'); N.refreshShell(); render(); } });
+        return;
+      }
+      N.refreshShell(); render();
+    }
+
+    N.boot({ shell: 'staff', nav: 'patients', title: 'nav.patients', roles: ['superadmin', 'assistant'], perm: 'viewPatients',
+      crumbs: () => [N.t('nav.workspace'), N.t('nav.patients')], render, click });
+    if (N.param('new') && N.can('registerPatients')) registerModal();
+  })();
+  </script>
+</body>
+</html>

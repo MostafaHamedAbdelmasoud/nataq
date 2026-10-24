@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analytics — Nataq</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="main">
+      <header class="topbar" id="topbar"></header>
+      <div class="content" id="content"></div>
+    </main>
+  </div>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+  <script>
+  (function () {
+    const N = Nataq;
+    const st = { days: 14 };
+
+    function compute(days) {
+      const D = N.db(), from = N.dayStart(Date.now()) - (days - 1) * 86400000, prevFrom = from - days * 86400000;
+      const k = { att: 0, rep: 0, appr: 0, retry: 0, prevAtt: 0, respTimes: [], letters: {}, byMember: {} };
+      D.patients.forEach(p => {
+        const list = N.msgsOf(p.id);
+        list.forEach((m, i) => {
+          if (N.isAttempt(m)) {
+            if (m.ts >= from) {
+              k.att++;
+              if (m.status === 'approved') k.appr++;
+              if (m.status === 'retry') k.retry++;
+              const nx = list.slice(i + 1).find(x => x.from === 'therapist');
+              if (nx) k.respTimes.push((nx.ts - m.ts) / 3600000);
+            } else if (m.ts >= prevFrom) k.prevAtt++;
+            if (m.status === 'retry' || m.status === 'approved') {
+              const L = k.letters[m.letter] = k.letters[m.letter] || { r: 0, a: 0 };
+              if (m.status === 'retry') L.r++; else L.a++;
+            }
+          }
+          if (m.from === 'therapist' && m.ts >= from) { k.rep++; k.byMember[m.by] = (k.byMember[m.by] || 0) + 1; }
+        });
+      });
+      k.rate = k.appr + k.retry ? Math.round(k.appr / (k.appr + k.retry) * 100) : 0;
+      k.avgResp = k.respTimes.length ? k.respTimes.reduce((a, b) => a + b, 0) / k.respTimes.length : 0;
+      k.delta = k.prevAtt ? Math.round((k.att - k.prevAtt) / k.prevAtt * 100) : 0;
+      return k;
+    }
+
+    function render() {
+      const { t, esc, L, icon } = N, D = N.db(), k = compute(st.days), s = N.activitySeries(st.days);
+      const S = [{ name: t('chart.attempts'), color: '#5D5FEF', values: s.att }, { name: t('chart.replies'), color: '#14C9A1', values: s.resp }];
+      const progItems = D.programs.map(pr => ({ label: esc(L(pr)), value: D.patients.filter(p => p.programId === pr.id && p.status !== 'inactive').length, color: pr.fg }));
+      const statusItems = ['active', 'paused', 'finished', 'inactive'].map((x, i) => ({ label: t('status.' + x), value: D.patients.filter(p => p.status === x).length, color: ['#14C9A1', '#F59E0B', '#5D5FEF', '#F43F5E'][i] }));
+      const letterItems = Object.entries(k.letters).map(([l, v]) => ({ l, pct: Math.round(v.r / (v.r + v.a) * 100), n: v.r + v.a }))
+        .filter(x => x.n >= 3).sort((a, b) => b.pct - a.pct).slice(0, 6)
+        .map(x => ({ label: `<span class="ar-letter" style="font-size:14px">${esc(x.l)}</span> <span class="muted text-xs">${t('an.attemptsN', { n: x.n })}</span>`, value: x.pct, suffix: '%', color: '#F59E0B' }));
+      const memberItems = D.team.map(u => ({ label: esc(L(u)), value: k.byMember[u.id] || 0, color: u.role === 'superadmin' ? '#2D1B69' : '#F59E0B' })).sort((a, b) => b.value - a.value);
+      const hrs = k.avgResp;
+
+      document.getElementById('content').innerHTML = `
+        <div class="page-head">
+          <div><h1 class="page-title">${t('nav.analytics')}</h1><p class="page-sub">${t('an.sub')}</p></div>
+          <div class="page-actions"><div class="seg" role="group" aria-label="${t('an.period')}">
+            ${[7, 14, 30].map(d => `<button class="${st.days === d ? 'active' : ''}" data-days="${d}">${t('an.days', { n: d })}</button>`).join('')}
+          </div></div>
+        </div>
+        <div class="kpi-grid">
+          <div class="stat"><div class="stat-icon indigo">${icon('mic')}</div><div class="stat-label">${t('an.kAttempts')}</div><div class="stat-value">${k.att}</div>
+            <span class="stat-delta ${k.delta >= 0 ? 'up' : 'down'}">${k.delta >= 0 ? '+' : ''}${k.delta}% ${t('an.vsPrev')}</span></div>
+          <div class="stat"><div class="stat-icon mint">${icon('chat')}</div><div class="stat-label">${t('an.kReplies')}</div><div class="stat-value">${k.rep}</div>
+            <span class="stat-delta flat">${t('an.perAttempt', { n: k.att ? (k.rep / k.att).toFixed(1) : 0 })}</span></div>
+          <div class="stat"><div class="stat-icon sky">${icon('check')}</div><div class="stat-label">${t('an.kRate')}</div><div class="stat-value">${k.rate}%</div>
+            <span class="stat-delta flat">${t('an.rateBase', { a: k.appr, r: k.retry })}</span></div>
+          <div class="stat"><div class="stat-icon amber">${icon('clock')}</div><div class="stat-label">${t('an.kResp')}</div><div class="stat-value">${hrs < 1 ? Math.round(hrs * 60) + t('an.minUnit') : hrs.toFixed(1) + t('an.hrUnit')}</div>
+            <span class="stat-delta ${hrs <= 12 ? 'up' : 'down'}">${t(hrs <= 12 ? 'an.respGood' : 'an.respSlow')}</span></div>
+        </div>
+        <section class="card mb-6">
+          <div class="card-head"><div><div class="card-title">${t('chart.title')}</div><div class="text-xs muted mt-2">${t('an.trendSub', { n: st.days })}</div></div>${N.legend(S)}</div>
+          <div class="chart-wrap">${N.lineChart({ labels: s.labels, series: S, height: 240, label: t('chart.title') })}</div>
+        </section>
+        <div class="two-col mb-6">
+          <section class="card"><div class="card-head"><div><div class="card-title">${t('an.lettersTitle')}</div><div class="text-xs muted mt-2">${t('an.lettersSub')}</div></div></div>
+            <div class="card-body">${letterItems.length ? N.hbars(letterItems) : N.empty('chart', t('an.noData'), '')}</div></section>
+          <section class="card"><div class="card-head"><div><div class="card-title">${t('an.teamTitle')}</div><div class="text-xs muted mt-2">${t('an.teamSub', { n: st.days })}</div></div></div>
+            <div class="card-body">${N.hbars(memberItems)}</div></section>
+        </div>
+        <div class="two-col">
+          <section class="card"><div class="card-head"><div class="card-title">${t('an.progTitle')}</div><a class="link text-xs" href="programs.html">${t('common.viewAll')}</a></div>
+            <div class="card-body">${N.hbars(progItems)}</div></section>
+          <section class="card"><div class="card-head"><div class="card-title">${t('an.statusTitle')}</div><a class="link text-xs" href="patients.html">${t('common.viewAll')}</a></div>
+            <div class="card-body">${N.hbars(statusItems)}</div></section>
+        </div>`;
+    }
+
+    function click(e) {
+      const d = e.target.closest('[data-days]'); if (!d) return;
+      st.days = +d.dataset.days; render();
+    }
+
+    N.boot({ shell: 'staff', nav: 'analytics', title: 'nav.analytics', roles: ['superadmin', 'assistant'],
+      crumbs: () => [N.t('nav.workspace'), N.t('nav.analytics')], render, click });
+  })();
+  </script>
+</body>
+</html>

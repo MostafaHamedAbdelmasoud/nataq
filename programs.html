@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Programs — Nataq</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .programs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    @media (max-width: 1200px) { .programs-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 760px) { .programs-grid { grid-template-columns: 1fr; } }
+    .program-card { background: var(--surface); border: 1px solid var(--rule); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; transition: transform .2s, box-shadow .2s; }
+    .program-card:hover { transform: translateY(-2px); box-shadow: 0 20px 40px -16px rgba(15,21,53,.12); }
+    .program-head { padding: 22px; display: flex; gap: 14px; align-items: flex-start; border-bottom: 1px solid var(--rule); }
+    .program-icon { width: 54px; height: 54px; border-radius: 14px; display: grid; place-items: center; font-family: 'IBM Plex Sans Arabic', sans-serif; font-weight: 700; font-size: 28px; flex-shrink: 0; }
+    .program-title { font-size: 16px; font-weight: 700; margin: 2px 0 3px; }
+    .program-alt { font-size: 13px; color: var(--ink-3); }
+    .program-letters { padding: 18px 22px; display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--rule); min-height: 84px; align-items: center; }
+    .plt { min-width: 42px; height: 42px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--rule); display: grid; place-items: center; font-family: 'IBM Plex Sans Arabic', sans-serif; font-weight: 700; font-size: 21px; }
+    .program-stats { padding: 16px 22px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; flex: 1; }
+    .ps-v { font-size: 17px; font-weight: 700; }
+    .ps-l { font-size: 11px; color: var(--ink-3); }
+    .program-foot { padding: 12px 22px; background: var(--surface-2); border-top: 1px solid var(--rule); display: flex; gap: 8px; justify-content: flex-end; }
+    .vid-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: #047857; background: var(--mint-50); padding: 2px 8px; border-radius: 6px; }
+    .vid-chip.missing { color: #B45309; background: var(--amber-50); }
+    .add-session { padding: 16px 20px; background: var(--surface-2); border-top: 1px solid var(--rule); }
+    .file-btn { position: relative; overflow: hidden; }
+    .file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .mx .session-row { padding: 12px 0; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="main">
+      <header class="topbar" id="topbar"></header>
+      <div class="content" id="content"></div>
+    </main>
+  </div>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+  <script>
+  (function () {
+    const N = Nataq;
+    const st = { q: '' };
+    const MAX_MB = 200;
+
+    function render() {
+      const { t, icon } = N;
+      document.getElementById('content').innerHTML = `
+        <div class="page-head">
+          <div><h1 class="page-title">${t('nav.programs')}</h1><p class="page-sub">${t('programs.sub')}</p></div>
+          <div class="page-actions">
+            <label class="scoped-search" style="min-width:220px">${icon('search', 'icon-sm')}<input id="q" type="search" value="${N.esc(st.q)}" placeholder="${t('programs.searchPh')}" aria-label="${t('programs.searchPh')}"></label>
+            <button class="btn ${N.can('managePrograms') ? 'btn-primary' : 'btn-secondary is-locked'}" data-act="upload">${icon(N.can('managePrograms') ? 'upload' : 'lock', 'icon-sm')}${t('programs.upload')}</button>
+          </div>
+        </div>
+        ${N.can('managePrograms') ? '' : `<div class="banner amber">${icon('lock', 'icon-sm')}<span class="grow">${t('programs.readOnly')}</span></div>`}
+        <div class="programs-grid" id="grid"></div>`;
+      const q = document.getElementById('q');
+      q.addEventListener('input', () => { st.q = q.value; renderGrid(); });
+      renderGrid();
+    }
+
+    function renderGrid() {
+      const { t, esc, icon } = N, D = N.db(), q = st.q.trim().toLowerCase();
+      const list = D.programs.filter(pr => !q || pr.en.toLowerCase().includes(q) || pr.ar.includes(st.q.trim()) || pr.letters.some(l => st.q.includes(l)));
+      document.getElementById('grid').innerHTML = list.length ? list.map((pr, i) => {
+        const pats = D.patients.filter(p => p.programId === pr.id && p.status !== 'inactive');
+        const vids = pr.sessions.filter(s => s.video && s.video.key).length;
+        const primary = N.getLang() === 'ar' ? pr.ar : pr.en, alt = N.getLang() === 'ar' ? pr.en : pr.ar;
+        return `<div class="program-card">
+          <div class="program-head">
+            <div class="program-icon" style="background:${pr.bg};color:${pr.fg}">${pr.letters[0]}</div>
+            <div style="flex:1;min-width:0"><div class="text-xs muted font-semibold">${t('programs.n', { n: D.programs.indexOf(pr) + 1 })}</div>
+              <div class="program-title">${esc(primary)}</div><div class="program-alt">${esc(alt)}</div></div>
+          </div>
+          <div class="program-letters">${pr.letters.map(l => `<div class="plt">${esc(l)}</div>`).join('')}</div>
+          <div class="program-stats">
+            <div><div class="ps-v">${pr.sessions.length}</div><div class="ps-l">${t('programs.sessions')}</div></div>
+            <div><div class="ps-v" style="color:${vids < pr.sessions.length ? '#B45309' : 'inherit'}">${vids}/${pr.sessions.length}</div><div class="ps-l">${t('programs.videosReal')}</div></div>
+            <div><div class="ps-v">${pats.length}</div><div class="ps-l">${t('programs.patients')}</div></div>
+          </div>
+          <div class="program-foot">
+            <button class="btn btn-ghost btn-sm ${N.can('managePrograms') ? '' : 'is-locked'}" data-act="edit" data-id="${pr.id}">${icon(N.can('managePrograms') ? 'edit' : 'lock', 'icon-sm')}${t('common.edit')}</button>
+            <button class="btn btn-secondary btn-sm" data-act="open" data-id="${pr.id}">${icon('book', 'icon-sm')}${t('programs.manage')}</button>
+          </div>
+        </div>`; }).join('') : `<div class="card" style="grid-column:1/-1">${N.empty('search', t('common.noResults'), t('common.noResultsSub'))}</div>`;
+    }
+
+    function fmtSize(b) { return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
+    async function attach(s, file) {
+      const { t } = N;
+      if (!file) return false;
+      if (!/^video\//.test(file.type)) { N.toast(t('val.videoType'), N.esc(file.name), 'error'); return false; }
+      if (file.size > MAX_MB * 1048576) { N.toast(t('val.videoSize', { n: MAX_MB }), N.esc(file.name), 'error'); return false; }
+      const key = 'v_' + s.id + '_' + Date.now();
+      N.toast(t('video.saving'), N.esc(file.name), 'info');
+      try { await N.VideoStore.put(key, file); }
+      catch (e) { N.toast(t('val.videoStore'), t('val.videoStoreBody'), 'error'); return false; }
+      if (s.video && s.video.key) N.VideoStore.del(s.video.key);
+      s.video = { name: file.name, size: fmtSize(file.size), type: file.type, at: Date.now(), key };
+      N.save();
+      N.toast(t('toast.videoUploaded'), t('toast.videoUploadedBody', { name: N.esc(file.name), s: N.esc(N.L(s)) }), 'success', { label: t('video.preview'), fn: () => N.previewVideo(s) });
+      return true;
+    }
+
+    function openManager(id) {
+      const { t, esc, L, icon } = N, pr = N.getProgram(id); if (!pr) return;
+      const ok = N.can('managePrograms');
+      const m = N.modal({ side: true, title: esc(L(pr)), sub: t('programs.managerSub'), body: '<div id="pm"></div>', onClose: () => renderGrid() });
+      const draw = () => {
+        const inUse = n => N.db().patients.filter(p => p.programId === id && p.current >= n && p.status !== 'inactive').length;
+        m.el.querySelector('#pm').innerHTML = pr.sessions.map((s, i) => `
+          <div class="session-row" data-sid="${s.id}">
+            <div class="session-num current">${i + 1}</div>
+            <div style="min-width:0" class="s-body">
+              <div class="session-title">${esc(L(s))} <span class="ar-letter">${esc(s.letter)}</span></div>
+              <div class="session-meta">${N.videoChip(s)}
+                <span>${t('programs.onSession', { n: inUse(i + 1) })}</span></div>
+            </div>
+            <div class="session-actions">${ok ? `
+              ${s.video && s.video.key ? `<button class="btn btn-ghost btn-sm" data-video="${s.id}" title="${t('video.preview')}" aria-label="${t('video.preview')}">${icon('eye', 'icon-sm')}</button>` : ''}
+              <label class="btn btn-ghost btn-sm file-btn" title="${t(s.video && s.video.key ? 'video.replace' : 'programs.uploadVideo')}">${icon('upload', 'icon-sm')}<input type="file" accept="video/*" data-file="${s.id}" aria-label="${t('programs.uploadVideo')}"></label>
+              <button class="btn btn-ghost btn-sm" data-rename="${s.id}" aria-label="${t('common.rename')}">${icon('edit', 'icon-sm')}</button>
+              <button class="btn btn-ghost btn-sm" data-del="${s.id}" aria-label="${t('common.delete')}" style="color:var(--rose)">${icon('trash', 'icon-sm')}</button>` : ''}
+            </div>
+          </div>`).join('') + (ok ? `
+          <div class="add-session mt-4" style="border-radius:12px;border:1px solid var(--rule)">
+            <div class="font-semibold text-sm mb-3">${t('programs.addSession')}</div>
+            <div class="form-grid">
+              <div class="field"><label>${t('field.titleEn')}</label><input class="input" id="nsEn" dir="ltr" placeholder="Placement drill"></div>
+              <div class="field"><label>${t('field.titleAr')}</label><input class="input" id="nsAr" dir="rtl" placeholder="تمرين المخرج"></div>
+            </div>
+            <div class="flex gap-3 items-center" style="flex-wrap:wrap">
+              <select class="select" id="nsL" style="width:auto">${pr.letters.map(l => `<option>${l}</option>`).join('')}</select>
+              <button class="btn btn-primary" data-add>${icon('plus', 'icon-sm')}${t('programs.addSession')}</button>
+            </div>
+          </div>` : '');
+      };
+      draw();
+      m.el.addEventListener('change', e => {
+        const f = e.target.closest('[data-file]'); if (!f) return;
+        const s = pr.sessions.find(x => x.id === f.dataset.file);
+        attach(s, f.files[0]).then(ok => { if (ok) draw(); });
+      });
+      m.el.addEventListener('click', e => {
+        const rn = e.target.closest('[data-rename]');
+        if (rn) {
+          const s = pr.sessions.find(x => x.id === rn.dataset.rename), body = rn.closest('.session-row').querySelector('.s-body');
+          body.innerHTML = `<div class="form-grid"><input class="input" data-en value="${esc(s.en)}" dir="ltr"><input class="input" data-ar value="${esc(s.ar)}" dir="rtl"></div>
+            <div class="flex gap-2 mt-2"><button class="btn btn-primary btn-sm" data-saveren="${s.id}">${t('common.save')}</button><button class="btn btn-ghost btn-sm" data-cancelren>${t('common.cancel')}</button></div>`;
+          body.querySelector('[data-en]').focus(); return;
+        }
+        if (e.target.closest('[data-cancelren]')) { draw(); return; }
+        const sv = e.target.closest('[data-saveren]');
+        if (sv) {
+          const s = pr.sessions.find(x => x.id === sv.dataset.saveren), row = sv.closest('.session-row');
+          const en = row.querySelector('[data-en]').value.trim(), ar = row.querySelector('[data-ar]').value.trim();
+          if (!en && !ar) { N.toast(t('val.title'), '', 'error'); return; }
+          s.en = en || ar; s.ar = ar || en; N.save(); N.toast(t('toast.saved'), '', 'success'); draw(); return;
+        }
+        const del = e.target.closest('[data-del]');
+        if (del) {
+          const idx = pr.sessions.findIndex(x => x.id === del.dataset.del);
+          if (pr.sessions.length <= 1) { N.toast(t('programs.cantDeleteLast'), '', 'error'); return; }
+          const affected = N.db().patients.filter(p => p.programId === id && p.current > idx);
+          N.confirmBox({ title: t('programs.deleteSession', { n: idx + 1 }), body: affected.length ? t('programs.deleteWarn', { n: affected.length }) : t('programs.deleteSafe'), yes: t('common.delete'), danger: true,
+            onYes: () => { const gone = pr.sessions[idx]; if (gone.video && gone.video.key) N.VideoStore.del(gone.video.key); pr.sessions.splice(idx, 1); affected.forEach(p => { p.current = Math.max(1, Math.min(p.current - 1, pr.sessions.length)); }); N.save(); N.toast(t('toast.deleted'), '', 'success'); draw(); } });
+          return;
+        }
+        if (e.target.closest('[data-add]')) {
+          const en = m.el.querySelector('#nsEn').value.trim(), ar = m.el.querySelector('#nsAr').value.trim();
+          if (!en && !ar) { N.fieldError(m.el, '#nsEn', t('val.title')); return; }
+          pr.sessions.push({ id: pr.id + '-' + N.uid('s'), en: en || ar, ar: ar || en, letter: m.el.querySelector('#nsL').value, video: null });
+          N.save(); N.toast(t('toast.sessionAdded'), t('common.sessionN', { n: pr.sessions.length }), 'success'); draw();
+          const pm = m.el.querySelector('.mx-body'); pm.scrollTop = pm.scrollHeight;
+        }
+      });
+    }
+
+    function editProgram(id) {
+      const { t, esc } = N, pr = N.getProgram(id);
+      N.modal({ title: t('programs.edit'), body: `
+        <div class="field"><label>${t('field.nameEn')}</label><input class="input" id="pEn" value="${esc(pr.en)}" dir="ltr"></div>
+        <div class="field"><label>${t('field.nameAr')}</label><input class="input" id="pAr" value="${esc(pr.ar)}" dir="rtl"></div>
+        <div class="field"><label>${t('programs.lettersField')}</label><input class="input ar" id="pL" value="${esc(pr.letters.join(' '))}" dir="rtl"><div class="hint">${t('programs.lettersHint')}</div></div>`,
+        actions: [{ label: t('common.cancel') }, { label: t('common.save'), kind: 'primary', onClick: el => {
+          const en = el.querySelector('#pEn').value.trim(), ar = el.querySelector('#pAr').value.trim();
+          const letters = el.querySelector('#pL').value.split(/[\s,،]+/).map(x => x.trim()).filter(x => /^[\u0600-\u06FF]$/.test(x));
+          if (!en || !ar) { N.fieldError(el, en ? '#pAr' : '#pEn', t('val.name')); return false; }
+          if (!letters.length) { N.fieldError(el, '#pL', t('val.letters')); return false; }
+          Object.assign(pr, { en, ar, letters: Array.from(new Set(letters)) });
+          N.save(); N.toast(t('toast.programUpdated'), esc(N.L(pr)), 'success'); renderGrid();
+        } }] });
+    }
+
+    function uploadModal() {
+      const { t, esc, L, icon } = N, D = N.db();
+      const m = N.modal({ title: t('programs.upload'), sub: t('programs.uploadSub'), body: `
+        <div class="field"><label>${t('col.program')}</label><select class="select" id="uP">${D.programs.map(pr => `<option value="${pr.id}">${esc(L(pr))}</option>`).join('')}</select></div>
+        <div class="field"><label>${t('programs.session')}</label><select class="select" id="uS"></select></div>
+        <div class="field"><label>${t('programs.videoFile')}</label>
+          <label class="file-btn" style="display:block;border:2px dashed var(--rule);border-radius:12px;padding:26px;text-align:center;cursor:pointer">
+            <div style="color:var(--indigo-600);display:flex;justify-content:center;margin-bottom:8px">${icon('video')}</div>
+            <div class="font-semibold" id="uName">${t('programs.pickFile')}</div><div class="hint">${t('programs.fileHint', { n: MAX_MB })}</div>
+            <input type="file" id="uF" accept="video/*">
+          </label></div>`,
+        actions: [{ label: t('common.cancel') }, { label: icon('upload', 'icon-sm') + t('programs.upload'), kind: 'primary', onClick: (el, close) => {
+          const f = el.querySelector('#uF').files[0];
+          if (!f) { N.toast(t('val.pickFile'), '', 'error'); return false; }
+          const pr = N.getProgram(el.querySelector('#uP').value), s = pr.sessions.find(x => x.id === el.querySelector('#uS').value);
+          const btn = el.querySelector('.mx-foot .btn-primary'); btn.disabled = true;
+          attach(s, f).then(ok => { btn.disabled = false; if (ok) { close(); renderGrid(); } });
+          return false;
+        } }] });
+      const fill = () => {
+        const pr = N.getProgram(m.el.querySelector('#uP').value);
+        m.el.querySelector('#uS').innerHTML = pr.sessions.map((s, i) => `<option value="${s.id}">${t('common.sessionN', { n: i + 1 })} · ${esc(L(s))}${s.video ? (s.video.key ? ' ✓' : ' · ' + t('video.sample')) : ''}</option>`).join('');
+      };
+      m.el.querySelector('#uP').onchange = fill; fill();
+      m.el.querySelector('#uF').onchange = e => { const f = e.target.files[0]; m.el.querySelector('#uName').textContent = f ? f.name + ' · ' + fmtSize(f.size) : t('programs.pickFile'); };
+    }
+
+    function click(e) {
+      const b = e.target.closest('[data-act]'); if (!b) return;
+      if (b.dataset.act === 'open') openManager(b.dataset.id);
+      if (b.dataset.act === 'edit' && N.need('managePrograms')) editProgram(b.dataset.id);
+      if (b.dataset.act === 'upload' && N.need('managePrograms')) uploadModal();
+    }
+
+    N.boot({ shell: 'staff', nav: 'programs', title: 'nav.programs', roles: ['superadmin', 'assistant'],
+      crumbs: () => [N.t('nav.workspace'), N.t('nav.programs')], render, click });
+    if (N.param('open')) openManager(N.param('open'));
+  })();
+  </script>
+</body>
+</html>

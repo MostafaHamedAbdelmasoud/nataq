@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My practice — Nataq</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .patient-content { padding: 32px 24px 60px; max-width: 1100px; margin: 0 auto; }
+    .patient-topbar .ptabs { margin-inline-start: 12px; }
+    @media (max-width: 760px) { .patient-topbar { padding: 12px 16px; gap: 10px; } .patient-topbar .ptabs { order: 3; width: 100%; margin: 0; } .ptab span { display: inline; } .patient-content { padding: 20px 16px 48px; } }
+    .ph-hero { background: linear-gradient(135deg, #1A2155 0%, #2D1B69 100%); color: #fff; border-radius: 20px; padding: 30px; display: grid; grid-template-columns: 1fr auto; gap: 28px; align-items: center; position: relative; overflow: hidden; margin-bottom: 22px; }
+    .ph-hero::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse 500px 400px at 85% 20%, rgba(93,95,239,.35), transparent 60%), radial-gradient(ellipse 400px 300px at 15% 80%, rgba(20,201,161,.2), transparent 60%); }
+    .ph-hero > * { position: relative; z-index: 1; }
+    @media (max-width: 760px) { .ph-hero { grid-template-columns: 1fr; } .ph-letter { display: none !important; } }
+    .ph-greet { font-size: 14px; color: rgba(255,255,255,.65); margin-bottom: 6px; }
+    .ph-title { font-size: 30px; font-weight: 700; line-height: 1.15; margin: 0 0 12px; }
+    .ph-desc { font-size: 15px; color: rgba(255,255,255,.78); max-width: 460px; line-height: 1.55; margin: 0; }
+    .ph-letter { width: 170px; height: 170px; border-radius: 24px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); display: grid; place-items: center; font-family: 'IBM Plex Sans Arabic', sans-serif; font-weight: 700; font-size: 100px; }
+    .journey { background: var(--surface); border: 1px solid var(--rule); border-radius: 16px; padding: 22px; margin-bottom: 22px; }
+    .step-track { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x mandatory; }
+    .step { min-width: 128px; flex: 1; padding: 13px; border-radius: 12px; border: 1px solid var(--rule); background: var(--surface-2); scroll-snap-align: start; text-align: start; font-family: inherit; color: inherit; }
+    .step.done { background: var(--mint-50); border-color: #A7F3D0; }
+    .step.current { background: var(--indigo-50); border-color: var(--indigo); box-shadow: 0 0 0 3px rgba(93,95,239,.12); }
+    .step.locked { opacity: .6; cursor: pointer; }
+    .step-n { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--ink-3); display: flex; justify-content: space-between; align-items: center; }
+    .step-l { font-size: 13px; font-weight: 600; margin: 6px 0; }
+    .step-s { font-size: 10px; font-weight: 700; letter-spacing: .04em; }
+    .ph-grid { display: grid; grid-template-columns: minmax(0,1fr) 360px; gap: 22px; }
+    @media (max-width: 980px) { .ph-grid { grid-template-columns: 1fr; } }
+    .lesson-stage { aspect-ratio: 16/9; background: linear-gradient(135deg, #1A2155 0%, #2D1B69 100%); display: grid; place-items: center; position: relative; overflow: hidden; }
+    .lesson-stage video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+    .lesson-stage .vid-msg { color: rgba(255,255,255,.8); }
+    .lesson-stage .big { font-family: 'IBM Plex Sans Arabic', sans-serif; font-weight: 700; font-size: 130px; color: rgba(255,255,255,.08); }
+    .lesson-play { position: absolute; width: 66px; height: 66px; border-radius: 50%; background: #fff; border: 0; display: grid; place-items: center; box-shadow: 0 20px 40px -10px rgba(0,0,0,.35); color: var(--navy); }
+    .lesson-play .icon { width: 24px; height: 24px; }
+    .lesson-bar { position: absolute; bottom: 0; left: 0; height: 4px; background: #14C9A1; width: 0; transition: width .2s linear; }
+    .cta { background: linear-gradient(135deg, var(--indigo), #8B5CF6); color: #fff; border-radius: 16px; padding: 18px 20px; display: flex; align-items: center; gap: 14px; margin-bottom: 22px; box-shadow: 0 20px 40px -14px rgba(93,95,239,.45); flex-wrap: wrap; }
+    .cta-ic { width: 44px; height: 44px; border-radius: 12px; background: rgba(255,255,255,.16); display: grid; place-items: center; }
+    .cta .grow { flex: 1; min-width: 200px; }
+    .mini-chat { padding: 14px; background: var(--paper); display: flex; flex-direction: column; gap: 8px; max-height: 420px; overflow-y: auto; }
+    .fb { padding: 14px 18px; border-bottom: 1px solid var(--rule); display: flex; gap: 12px; }
+    .fb:last-child { border-bottom: 0; }
+    .fb .grow { flex: 1; min-width: 0; }
+  </style>
+</head>
+<body>
+  <header class="patient-topbar" id="ptopbar"></header>
+  <div class="patient-content" id="content"></div>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+  <script>
+  (function () {
+    const N = Nataq;
+    let lessonTimer = null;
+
+    function render() {
+      const { t, esc, L, icon, avatar } = N;
+      const p = N.me(), pr = N.getProgram(p.programId), ses = N.sessionsOf(p), cs = N.currentSession(p);
+      const msgs = N.msgsOf(p.id), mine = msgs.filter(m => N.isAttempt(m) && m.session === p.current && m.prog === p.programId);
+      const waiting = mine.filter(m => m.status === 'waiting').length, approved = mine.some(m => m.status === 'approved');
+      const curN = Math.min(p.current, ses.length);
+      const thread = msgs.filter(m => m.prog === p.programId && m.session === curN);
+      const recent = thread.slice(-4);
+      const unread = msgs.filter(m => m.from !== 'patient' && m.ts > (p.notifSeen || 0)).length;
+      const finished = p.status === 'finished', paused = p.status === 'paused';
+
+      let state;
+      if (finished) state = t('ph.stateFinished');
+      else if (paused) state = t('ph.statePaused');
+      else if (approved && !waiting) state = t('ph.stateApproved');
+      else if (waiting) state = t('ph.stateWaiting', { n: waiting });
+      else state = t('ph.stateTodo');
+
+      document.getElementById('content').innerHTML = `
+        <div class="ph-hero">
+          <div>
+            <div class="ph-greet">${t('ph.greet', { name: esc(L(p).split(' ')[0]) })}</div>
+            <h1 class="ph-title">${finished ? t('ph.finishedTitle') : t('ph.todayTitle')} ${finished ? '' : `<span class="ar">${esc(cs.letter)}</span>`}</h1>
+            <p class="ph-desc">${finished ? t('ph.finishedDesc', { prog: esc(L(pr)) }) : esc(L(cs)) + ' — ' + state}</p>
+            <div class="flex gap-2 mt-4" style="flex-wrap:wrap">
+              ${!finished && !paused ? `<a href="patient-record.html" class="btn btn-white" style="padding:11px 18px">${icon('mic', 'icon-sm')}${t('ph.record')}</a>` : ''}
+              ${cs && cs.video && !finished ? `<button class="btn btn-light" style="padding:11px 18px" data-act="lesson">${icon('play', 'icon-sm')}${t('ph.watch')}</button>` : ''}
+            </div>
+          </div>
+          <div class="ph-letter">${esc(finished ? '★' : cs.letter)}</div>
+        </div>
+
+        ${(() => { const r = N.lastReminder(p.id), mineAll = msgs.filter(N.isAttempt), lastRec = mineAll.length ? mineAll[mineAll.length - 1].ts : 0;
+          return r && r.ts > lastRec && !finished && !paused ? `<div class="banner indigo">${icon('bell', 'icon-sm')}<span class="grow">${t('ph.reminderBanner', { name: esc(N.authorName(r.by)), t: N.rel(r.ts) })}</span><a class="btn btn-primary btn-sm" href="patient-record.html">${t('ph.record')}</a></div>` : ''; })()}
+        ${paused ? `<div class="banner amber">${icon('pausec', 'icon-sm')}<span class="grow">${t('ph.pausedBanner')}</span></div>` : ''}
+
+        <div class="journey">
+          <div class="flex justify-between items-center mb-4" style="flex-wrap:wrap;gap:8px">
+            <div><div class="font-bold">${t('ph.journey')} — ${esc(L(pr))}</div>
+              <div class="text-xs muted mt-2">${finished ? t('status.finished') : t('ph.inSession', { n: p.current, m: ses.length })}</div></div>
+            <div class="text-sm muted"><strong style="color:var(--indigo-600)">${N.pct(p)}%</strong> ${t('ph.complete')}</div>
+          </div>
+          <div class="step-track" id="track">
+            ${ses.map((s, i) => { const n = i + 1, done = finished || n < p.current, cur = !done && n === p.current;
+              return `<button class="step ${done ? 'done' : cur ? 'current' : 'locked'}" ${!done && !cur ? 'data-act="locked"' : cur ? 'data-act="current"' : ''} ${cur ? 'id="curStep"' : ''}>
+                <div class="step-n">${String(n).padStart(2, '0')} ${done ? N.icon('check', 'icon-sm') : !cur ? N.icon('lock', 'icon-sm') : ''}</div>
+                <div class="step-l">${esc(L(s))}</div>
+                <div class="step-s" style="color:${done ? '#047857' : cur ? 'var(--indigo-600)' : 'var(--ink-3)'}">${t(done ? 'ph.sDone' : cur ? 'ph.sNow' : 'ph.sLocked')}</div>
+              </button>`; }).join('')}
+          </div>
+        </div>
+
+        ${!finished && !paused ? `<div class="cta">
+          <div class="cta-ic">${icon('mic')}</div>
+          <div class="grow"><div class="font-bold">${t('ph.ctaTitle')}</div><div class="text-xs" style="opacity:.8;margin-top:2px">${t('ph.ctaSub')}</div></div>
+          <a href="patient-record.html" class="btn btn-white">${t('ph.openRecorder')} ${icon('arrow', 'icon-sm')}</a>
+        </div>` : ''}
+
+        <div class="ph-grid">
+          <section class="card" style="overflow:hidden">
+            <div class="card-head"><div><div class="card-title">${t('ph.lesson')}</div><div class="text-xs muted mt-2">${cs && cs.video ? esc(cs.video.name) : ''}</div></div>
+              ${cs && cs.video ? `<span class="badge badge-indigo"><span class="badge-dot"></span>${t('ph.fromTherapist')}</span>` : ''}</div>
+            ${cs && cs.video && !finished ? `<div class="lesson-stage"><div class="big">${esc(cs.letter)}</div>
+              <button class="lesson-play" data-act="lesson" aria-label="${t('ph.watch')}" id="lessonBtn">${icon('play')}</button><div class="lesson-bar" id="lessonBar"></div></div>
+              <div class="card-body text-sm" style="color:var(--ink-2);line-height:1.6">${t('ph.lessonTip', { l: esc(cs.letter) })}${cs.video.key ? '' : `<div class="hint mt-2">${t('ph.sampleLesson')}</div>`}</div>`
+              : N.empty('video', t(finished ? 'ph.noLessonDone' : 'ph.noLesson'), t(finished ? '' : 'ph.noLessonSub'))}
+          </section>
+
+          <section class="card" id="chat">
+            <div class="card-head"><div><div class="card-title">${t('ph.chatTitle')}</div><div class="text-xs muted mt-2">${t('chat.sChip', { n: Math.min(p.current, ses.length) })} · ${esc(L(cs))}</div></div>
+              ${unread ? `<span class="badge badge-mint"><span class="badge-dot"></span>${t('ph.unreadN', { n: unread })}</span>` : ''}</div>
+            <div class="mini-chat">${recent.length ? recent.map(m => m.from === 'system'
+                ? `<div class="sys-msg ${m.kind}">${icon(N.sysIcon(m), 'icon-sm')}${N.sysText(m)}</div>`
+                : `<div class="wa-row ${m.from === 'patient' ? 'out' : 'in'}"><div class="wa-bubble ${N.isAttempt(m) ? 'attempt' : ''}">
+                    ${m.from !== 'patient' ? `<div class="wa-name therapist">${esc(N.authorName(m.by))}</div>` : ''}
+                    ${m.type === 'audio' ? N.audioHTML(m.id, m.audio, m.dur, 20) : `<div class="wa-text">${N.msgText(m)}</div>`}
+                    <div class="wa-meta">${N.isAttempt(m) ? N.verdictBadge(m) : ''}<span>${N.fmtTime(m.ts)}</span></div>
+                    ${m.reaction ? `<span class="wa-reaction">${m.reaction}</span>` : ''}</div></div>`).join('')
+              : N.empty('chat', t('ph.noFeedback'), t('ph.noFeedbackSub'))}</div>
+            <div style="padding:12px 16px;border-top:1px solid var(--rule)"><a class="btn btn-primary w-full" style="justify-content:center" href="patient-chat.html?s=${Math.min(p.current, ses.length)}">${icon('chat', 'icon-sm')}${t('ph.openChat')}</a></div>
+          </section>
+        </div>`;
+      const cur = document.getElementById('curStep');
+      if (cur) cur.scrollIntoView({ block: 'nearest', inline: 'center' });
+      
+    }
+
+    function playLesson() {
+      const cs = N.currentSession(N.me()), stage = document.querySelector('.lesson-stage');
+      if (stage && cs && cs.video && cs.video.key) {
+        stage.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (!stage.querySelector('video')) N.mountVideo(stage, cs);
+        else { const v = stage.querySelector('video'); v.play && v.play(); }
+        return;
+      }
+      const bar = document.getElementById('lessonBar'), btn = document.getElementById('lessonBtn');
+      if (!bar) return;
+      if (lessonTimer) { clearInterval(lessonTimer); lessonTimer = null; btn.innerHTML = N.icon('play'); N.toast(N.t('ph.lessonPaused'), '', 'info'); return; }
+      document.querySelector('.lesson-stage').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      btn.innerHTML = N.icon('pause');
+      let w = parseFloat(bar.style.width) || 0;
+      lessonTimer = setInterval(() => {
+        w += 1; bar.style.width = w + '%';
+        if (w >= 100) { clearInterval(lessonTimer); lessonTimer = null; btn.innerHTML = N.icon('refresh'); bar.style.width = '0';
+          N.toast(N.t('ph.lessonDone'), N.t('ph.lessonDoneBody'), 'success', { label: N.t('ph.record'), fn: () => { location.href = 'patient-record.html'; } }); }
+      }, 80);
+    }
+
+    function click(e) {
+      const b = e.target.closest('[data-act]'); if (!b) return;
+      if (b.dataset.act === 'locked') N.toast(N.t('status.locked'), N.t('ph.lockedBody'), 'info');
+      if (b.dataset.act === 'current') location.href = 'patient-record.html';
+      if (b.dataset.act === 'lesson') playLesson();
+    }
+
+    N.boot({ shell: 'patient', nav: 'home', title: 'ph.navHome', roles: ['patient'], render, click });
+  })();
+  </script>
+</body>
+</html>

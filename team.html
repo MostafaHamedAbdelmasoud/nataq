@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team — Nataq</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .roles-explain { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    @media (max-width: 800px) { .roles-explain { grid-template-columns: 1fr; } }
+    .role-card { background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 18px; }
+    .role-card h3 { margin: 10px 0 6px; font-size: 15px; }
+    .role-card p { margin: 0; font-size: 13px; color: var(--ink-2); line-height: 1.6; }
+    .perm-pills { display: flex; gap: 4px; flex-wrap: wrap; }
+    .perm-pill { background: var(--surface-2); border: 1px solid var(--rule); padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--ink-2); }
+    .perm-pill.off { background: var(--rose-50); border-color: #FBB8C3; color: var(--rose); text-decoration: line-through; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="main">
+      <header class="topbar" id="topbar"></header>
+      <div class="content" id="content"></div>
+    </main>
+  </div>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+  <script>
+  (function () {
+    const N = Nataq;
+    const PERMS = ['viewPatients', 'editPatients', 'registerPatients', 'reviewRecordings', 'respond', 'unlockSessions', 'managePrograms'];
+    const LOCKED = ['deleteUsers', 'manageTeam'];
+    const st = { q: '' };
+
+    function render() {
+      const { t, icon } = N;
+      document.getElementById('content').innerHTML = `
+        <div class="page-head">
+          <div><h1 class="page-title">${t('nav.team')}</h1><p class="page-sub">${t('team.sub')}</p></div>
+          <div class="page-actions"><button class="btn btn-primary" data-act="add">${icon('plus', 'icon-sm')}${t('team.add')}</button></div>
+        </div>
+        <div class="roles-explain">
+          <div class="role-card">${N.roleBadge('superadmin')}<h3>${t('team.saTitle')}</h3><p>${t('team.saBody')}</p></div>
+          <div class="role-card">${N.roleBadge('assistant')}<h3>${t('team.asTitle')}</h3><p>${t('team.asBody')}</p></div>
+        </div>
+        <section class="card">
+          <div class="card-head">
+            <div><div class="card-title" id="countTitle"></div></div>
+            <label class="scoped-search" style="max-width:280px">${icon('search', 'icon-sm')}<input id="q" type="search" value="${N.esc(st.q)}" placeholder="${t('team.searchPh')}" aria-label="${t('team.searchPh')}"></label>
+          </div>
+          <div class="table-wrap"><table class="table"><thead><tr>
+            <th>${t('team.col.member')}</th><th>${t('team.col.role')}</th><th>${t('team.col.perms')}</th><th>${t('team.col.added')}</th><th>${t('col.status')}</th><th></th>
+          </tr></thead><tbody id="rows"></tbody></table></div>
+        </section>`;
+      const q = document.getElementById('q');
+      q.addEventListener('input', () => { st.q = q.value; rows(); });
+      rows();
+    }
+
+    function rows() {
+      const { t, esc, L, icon, avatar } = N, D = N.db(), q = st.q.trim().toLowerCase();
+      const list = D.team.filter(u => !q || u.en.toLowerCase().includes(q) || u.ar.includes(st.q.trim()) || N.digits(u.phone).includes(N.digits(q) || '#'));
+      document.getElementById('countTitle').textContent = t('team.count', { n: D.team.length, a: D.team.filter(u => u.role === 'assistant').length });
+      document.getElementById('rows').innerHTML = list.length ? list.map(u => {
+        const isMe = u.id === N.me().id, sa = u.role === 'superadmin';
+        const replies = Object.values(D.messages).reduce((a, l) => a + l.filter(m => m.from === 'therapist' && m.by === u.id).length, 0);
+        return `<tr>
+          <td><div class="user-cell">${avatar(u)}<div class="user-cell-info"><div class="user-cell-name">${esc(L(u))}${isMe ? ` <span class="muted">(${t('team.you')})</span>` : ''}</div><div class="user-cell-meta"><span dir="ltr">${esc(u.phone)}</span> · ${t('team.repliesN', { n: replies })}</div></div></div></td>
+          <td>${N.roleBadge(u.role)}</td>
+          <td><div class="perm-pills">${sa ? `<span class="perm-pill">${t('team.allPerms')}</span>` :
+            PERMS.filter(k => u.perms[k]).map(k => `<span class="perm-pill">${t('perm.' + k)}</span>`).join('') + LOCKED.map(k => `<span class="perm-pill off">${t('perm.' + k)}</span>`).join('')}</div></td>
+          <td class="text-sm muted">${N.fmtDate(u.added)}</td>
+          <td>${u.active ? `<span class="badge badge-mint"><span class="badge-dot"></span>${t('status.active')}</span>` : `<span class="badge badge-rose"><span class="badge-dot"></span>${t('status.inactive')}</span>`}</td>
+          <td>${sa ? '' : `<div class="dd row-menu"><button class="btn btn-ghost btn-sm" data-dd aria-label="${t('common.actions')}">${icon('dots', 'icon-sm')}</button><div class="dd-panel">
+            <button class="dd-item" data-act="edit" data-id="${u.id}">${icon('edit', 'icon-sm')}${t('team.editPerms')}</button>
+            <button class="dd-item" data-act="toggle" data-id="${u.id}">${icon(u.active ? 'userx' : 'usercheck', 'icon-sm')}${t(u.active ? 'patients.deactivate' : 'patients.activate')}</button>
+            <div class="dd-sep"></div>
+            <button class="dd-item danger" data-act="remove" data-id="${u.id}">${icon('trash', 'icon-sm')}${t('team.remove')}</button>
+          </div></div>`}</td>
+        </tr>`; }).join('') : `<tr><td colspan="6">${N.empty('search', t('common.noResults'), '')}</td></tr>`;
+    }
+
+    function formModal(u) {
+      const { t, esc, L } = N, isNew = !u;
+      const perms = u ? u.perms : { viewPatients: true, reviewRecordings: true, respond: true };
+      N.modal({ side: true, title: t(isNew ? 'team.add' : 'team.editPerms'), sub: t('team.formSub'), body: `
+        <div class="form-grid">
+          <div class="field"><label>${t('field.nameEn')}</label><input class="input" id="aEn" dir="ltr" value="${u ? esc(u.en) : ''}" placeholder="Mariam Ashraf"></div>
+          <div class="field"><label>${t('field.nameAr')}</label><input class="input" id="aAr" dir="rtl" value="${u ? esc(u.ar) : ''}" placeholder="مريم أشرف"></div>
+        </div>
+        <div class="field"><label>${t('field.phone')}</label><div class="input-group"><div class="input-prefix">+20</div><input class="input" id="aPh" type="tel" dir="ltr" value="${u ? esc(u.phone.replace(/^\+20\s*/, '')) : ''}" placeholder="10 2345 6789"></div>
+          <div class="hint">${t('team.loginHint', { pw: N.STAFF_PASSWORD })}</div></div>
+        <div class="field"><label>${t('team.col.perms')}</label><div class="perm-list">
+          ${PERMS.map(k => `<label class="perm-item"><input type="checkbox" data-perm="${k}" ${perms[k] ? 'checked' : ''}><div class="perm-item-text"><div class="perm-item-name">${t('perm.' + k)}</div><div class="perm-item-note">${t('perm.' + k + '.d')}</div></div></label>`).join('')}
+          ${LOCKED.map(k => `<div class="perm-item danger"><input type="checkbox" disabled><div class="perm-item-text"><div class="perm-item-name">${t('perm.' + k)}</div><div class="perm-item-note">${t('perm.adminOnly')}</div></div></div>`).join('')}
+        </div></div>`,
+        actions: [{ label: t('common.cancel') }, { label: t(isNew ? 'team.create' : 'common.save'), kind: 'primary', onClick: el => {
+          const en = el.querySelector('#aEn').value.trim(), ar = el.querySelector('#aAr').value.trim(), ph = N.digits(el.querySelector('#aPh').value).replace(/^0/, '');
+          if (!en && !ar) { N.fieldError(el, '#aEn', t('val.name')); return false; }
+          if (ph.length !== 10) { N.fieldError(el, '#aPh', t('val.phone')); return false; }
+          const clash = N.db().team.find(x => N.digits(x.phone).endsWith(ph) && (!u || x.id !== u.id));
+          if (clash) { N.fieldError(el, '#aPh', t('val.phoneTaken')); return false; }
+          const p = {}; PERMS.forEach(k => { p[k] = el.querySelector(`[data-perm="${k}"]`).checked; });
+          if (!Object.values(p).some(Boolean)) { N.toast(t('val.onePerm'), '', 'error'); return false; }
+          const phone = '+20 ' + ph.slice(0, 3) + ' ' + ph.slice(3, 6) + ' ' + ph.slice(6);
+          if (isNew) N.db().team.push({ id: N.uid('u'), en: en || ar, ar: ar || en, phone, role: 'assistant', active: true, color: 1 + Math.floor(Math.random() * 8), added: Date.now(), perms: p });
+          else Object.assign(u, { en: en || ar, ar: ar || en, phone, perms: p });
+          N.save();
+          N.toast(t(isNew ? 'toast.assistantCreated' : 'toast.saved'), isNew ? t('toast.assistantCreatedBody', { phone, pw: N.STAFF_PASSWORD }) : '', 'success');
+          rows();
+        } }] });
+    }
+
+    function click(e) {
+      const { t } = N;
+      const b = e.target.closest('[data-act]'); if (!b) return;
+      document.querySelectorAll('.dd.open').forEach(x => x.classList.remove('open'));
+      if (b.dataset.act === 'add') { formModal(null); return; }
+      const u = N.getMember(b.dataset.id); if (!u || u.role === 'superadmin') return;
+      const name = N.esc(N.L(u));
+      if (b.dataset.act === 'edit') formModal(u);
+      if (b.dataset.act === 'toggle') { u.active = !u.active; N.save(); N.toast(t(u.active ? 'toast.activated' : 'toast.deactivated'), name + (u.active ? '' : ' · ' + t('team.cantLogin')), 'success'); rows(); }
+      if (b.dataset.act === 'remove') N.confirmBox({ title: t('team.removeTitle', { name }), body: t('team.removeBody'), yes: t('team.remove'), danger: true,
+        onYes: () => { const D = N.db(); D.team = D.team.filter(x => x.id !== u.id); N.save(); N.toast(t('toast.deleted'), name, 'success'); rows(); } });
+    }
+
+    N.boot({ shell: 'staff', nav: 'team', title: 'nav.team', roles: ['superadmin', 'assistant'], perm: 'manageTeam',
+      crumbs: () => [N.t('nav.workspace'), N.t('nav.team')], render, click });
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat — Nataq</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .patient-content { padding: 24px 24px 40px; max-width: 900px; margin: 0 auto; }
+    .patient-topbar .ptabs { margin-inline-start: 12px; }
+    @media (max-width: 760px) { .patient-topbar { padding: 12px 16px; gap: 10px; } .patient-topbar .ptabs { order: 3; width: 100%; margin: 0; } .patient-content { padding: 12px 10px 24px; } }
+    .pc-card { background: var(--surface); border: 1px solid var(--rule); border-radius: 16px; overflow: hidden; }
+    .pc-head { display: flex; gap: 12px; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--rule); }
+    .pc-head .grow { flex: 1; min-width: 0; }
+    .pc-avatars { display: flex; }
+    .pc-avatars .avatar { border: 2px solid var(--surface); }
+    .pc-avatars .avatar + .avatar { margin-inline-start: -10px; }
+  </style>
+</head>
+<body>
+  <header class="patient-topbar" id="ptopbar"></header>
+  <div class="patient-content" id="content"></div>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+  <script src="chat.js"></script>
+  <script>
+  (function () {
+    const N = Nataq;
+    let chat = null;
+
+    function render() {
+      const { t, esc, L, avatar } = N, p = N.me(), D = N.db();
+      const team = D.team.filter(u => u.active).slice(0, 3);
+      document.getElementById('content').innerHTML = `
+        <div class="pc-card">
+          <div class="pc-head">
+            <div class="pc-avatars">${team.map(u => avatar(u, 'avatar-sm')).join('')}</div>
+            <div class="grow"><div class="font-bold">${t('chat.withTeam', { name: esc(L(N.getMember('u1'))) })}</div>
+              <div class="text-xs muted">${esc(L(N.getProgram(p.programId)))} · ${p.status === 'finished' ? t('status.finished') : t('common.sessionOf', { n: p.current, m: N.sessionsOf(p).length })}</div></div>
+            <a class="btn btn-secondary btn-sm" href="patient-record.html">${N.icon('mic', 'icon-sm')}${t('ph.openRecorder')}</a>
+          </div>
+          <div id="chat" class="chat-host tall"></div>
+        </div>`;
+      if (chat) chat.destroy();
+      chat = NataqChat.create(document.getElementById('chat'), {
+        pid: p.id, viewer: 'patient', session: +N.param('s') || null, focus: N.param('m'),
+        onChange: () => N.refreshShell(),
+        onSession: s => history.replaceState(null, '', '?s=' + s)
+      });
+      chat.render();
+      // opening the chat marks the therapist's messages as read
+      p.notifSeen = Date.now(); N.save(); N.refreshShell();
+    }
+
+    N.boot({ shell: 'patient', nav: 'chat', title: 'ph.navChat', roles: ['patient'], render });
+  })();
+  </script>
+</body>
+</html>

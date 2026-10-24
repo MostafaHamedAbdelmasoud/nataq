@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Review inbox — Nataq</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="main">
+      <header class="topbar" id="topbar"></header>
+      <div class="content" id="content"></div>
+    </main>
+  </div>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+  <script src="chat.js"></script>
+  <script>
+  (function () {
+    const N = Nataq;
+    const st = { sel: N.param('p'), filter: N.param('f') || 'all', q: '', mobileConvo: !!N.param('p') };
+    let chat = null;
+
+    function convoList() {
+      const q = st.q.trim().toLowerCase();
+      return N.db().patients
+        .filter(p => p.status !== 'inactive' && N.msgsOf(p.id).length)
+        .map(p => ({ p, w: N.waitingOf(p.id), u: N.unseenTexts(p.id), last: N.lastMsg(p.id) }))
+        .filter(c => !q || c.p.en.toLowerCase().includes(q) || c.p.ar.includes(st.q.trim()))
+        .sort((a, b) => ((b.w.length + b.u.length) > 0) - ((a.w.length + a.u.length) > 0) || (a.w.length ? a.w[0].ts - (b.w[0] ? b.w[0].ts : 0) : b.last.ts - a.last.ts));
+    }
+
+    function render() {
+      const { t, icon } = N;
+      const all = convoList();
+      if (!st.sel || !N.getPatient(st.sel)) { const first = all.find(c => c.w.length) || all[0]; st.sel = first ? first.p.id : null; }
+      const total = N.totalWaiting();
+      document.getElementById('content').innerHTML = `
+        <div class="page-head">
+          <div><h1 class="page-title">${t('nav.review')}</h1><p class="page-sub">${t('review.sub')}</p></div>
+          <div class="page-actions">${total ? N.waitingLabel(total) : `<span class="badge badge-mint"><span class="badge-dot"></span>${t('dash.allClear')}</span>`}</div>
+        </div>
+        <div class="convo-shell ${st.mobileConvo ? 'show-convo' : ''}" id="shell">
+          <div class="convo-left">
+            <div style="padding:12px 14px;border-bottom:1px solid var(--rule)">
+              <label class="scoped-search" style="max-width:none">${icon('search', 'icon-sm')}
+                <input id="q" type="search" value="${N.esc(st.q)}" placeholder="${t('review.searchPh')}" aria-label="${t('review.searchPh')}"></label>
+            </div>
+            <div class="convo-filters"><div class="chips" id="filters"></div></div>
+            <div class="inbox-list" id="list"></div>
+          </div>
+          <div class="convo-right"><div id="head"></div><div id="chat" class="chat-host"></div></div>
+        </div>`;
+      const q = document.getElementById('q');
+      q.addEventListener('input', () => { st.q = q.value; renderList(); });
+      if (chat) chat.destroy();
+      chat = N.getPatient(st.sel) ? NataqChat.create(document.getElementById('chat'), {
+        pid: st.sel, viewer: 'staff', session: +N.param('s') || null, focus: N.param('m'),
+        onChange: () => { N.refreshShell(); renderList(); renderHead(); },
+        onUnlock: doUnlock,
+        onSession: s => history.replaceState(null, '', '?p=' + st.sel + '&s=' + s)
+      }) : null;
+      renderList(); renderHead();
+      if (chat) chat.render(); else document.getElementById('chat').innerHTML = N.empty('chat', t('review.emptyTitle'), t('review.emptySub'));
+    }
+
+    function renderList() {
+      const { t, esc, L, avatar } = N;
+      const all = convoList();
+      const counts = { all: all.length, waiting: all.filter(c => c.w.length).length, reviewed: all.filter(c => !c.w.length).length };
+      document.getElementById('filters').innerHTML = ['all', 'waiting', 'reviewed'].map(f =>
+        `<button class="chip-btn ${st.filter === f ? 'active' : ''}" data-filter="${f}">${t('review.filter.' + f)} <span class="n">${counts[f]}</span></button>`).join('');
+      const rows = all.filter(c => st.filter === 'all' || (st.filter === 'waiting' ? c.w.length : !c.w.length));
+      document.getElementById('list').innerHTML = rows.length ? rows.map(({ p, w, u, last }) => `
+        <button class="inbox-row ${p.id === st.sel ? 'active' : ''}" data-open="${p.id}">
+          ${avatar(p)}
+          <div style="min-width:0">
+            <div class="inbox-name-row"><div class="inbox-name">${esc(L(p))}</div><div class="inbox-time">${N.shortTime(last.ts)}</div></div>
+            <div class="inbox-preview-row"><div class="inbox-preview">${preview(last)}</div>
+              ${w.length ? `<span class="inbox-unread waiting" title="${t('status.waiting')}">${w.length}</span>` : ''}${u.length ? `<span class="inbox-unread" title="${t('chat.unreadMsgs')}">${u.length}</span>` : ''}</div>
+          </div>
+        </button>`).join('') : N.empty('search', t('common.noResults'), t('common.noResultsSub'));
+    }
+
+    function preview(m) {
+      const { t, icon, esc } = N;
+      const pre = m.session ? `<span class="muted">${t('chat.sChip', { n: m.session })} · </span>` : '';
+      if (N.isAttempt(m)) return pre + `<span class="inbox-preview-icon">${icon('mic', 'icon-sm')}</span>${t('review.voiceAttempt')} · ${N.fmtDur(m.dur)} · <span class="ar">${esc(m.letter)}</span>`;
+      if (m.from === 'system') return pre + N.sysText(m);
+      if (m.deleted) return pre + N.msgText(m);
+      if (m.from === 'patient') return pre + N.msgText(m);
+      return pre + (m.by === N.me().id ? t('review.you') : esc(N.authorName(m.by))) + ': ' + (m.type === 'audio' ? t('review.voiceNote') : N.msgText(m));
+    }
+
+    function renderHead() {
+      const { t, esc, L, icon, avatar } = N, p = N.getPatient(st.sel), box = document.getElementById('head');
+      if (!p) { box.innerHTML = ''; return; }
+      const ses = N.sessionsOf(p), canU = N.can('unlockSessions');
+      box.innerHTML = `<div class="convo-head">
+        <button class="icon-btn sm convo-back" data-back aria-label="${t('common.back')}">${icon('back', 'icon-sm')}</button>
+        ${avatar(p)}
+        <div class="convo-head-info">
+          <div class="convo-head-name">${esc(L(p))}</div>
+          <div class="convo-head-sub">${esc(L(N.getProgram(p.programId)))} · ${p.status === 'finished' ? t('status.finished') : t('common.sessionOf', { n: p.current, m: ses.length })} · ${t('common.age', { n: p.age })}</div>
+        </div>
+        <div class="convo-head-actions">
+          <a href="patient-detail.html?id=${p.id}" class="btn btn-ghost btn-sm">${icon('eye', 'icon-sm')}${t('review.profile')}</a>
+          ${p.status === 'active' ? `<button class="btn btn-ghost btn-sm" data-remind>${icon('bell', 'icon-sm')}${t('patients.remind')}</button>` : ''}
+          ${p.status !== 'finished' && p.status !== 'inactive' ? `<button class="btn ${canU ? (N.isReady(p) ? 'btn-primary' : 'btn-secondary') : 'btn-secondary is-locked'} btn-sm" data-unlock>${icon(canU ? 'unlock' : 'lock', 'icon-sm')}${t(p.current >= ses.length ? 'pd.finishProgram' : 'pd.unlockNext')}</button>` : ''}
+        </div>
+      </div>`;
+    }
+
+    function doUnlock() {
+      if (!N.need('unlockSessions')) return;
+      const p = N.getPatient(st.sel), res = N.unlockNext(p.id);
+      N.toast(N.t(res === 'finished' ? 'toast.programFinished' : 'toast.sessionUnlocked'), N.t('toast.patientNotified', { name: N.esc(N.L(p)) }), 'success');
+      N.refreshShell(); renderList(); renderHead(); chat.setPatient(p.id, null);
+    }
+
+    function click(e) {
+      const open = e.target.closest('[data-open]');
+      if (open) {
+        st.sel = open.dataset.open; st.mobileConvo = true; N.Player.stop();
+        history.replaceState(null, '', '?p=' + st.sel);
+        document.getElementById('shell').classList.add('show-convo');
+        chat.setPatient(st.sel, null); renderList(); renderHead(); return;
+      }
+      const f = e.target.closest('[data-filter]'); if (f) { st.filter = f.dataset.filter; renderList(); return; }
+      if (e.target.closest('[data-back]')) { st.mobileConvo = false; document.getElementById('shell').classList.remove('show-convo'); return; }
+      if (e.target.closest('[data-unlock]')) { doUnlock(); return; }
+      if (e.target.closest('[data-remind]')) { if (N.remindToast(st.sel) === 'sent') { renderList(); chat.render(); } }
+    }
+
+    N.boot({ shell: 'staff', nav: 'review', title: 'nav.review', roles: ['superadmin', 'assistant'], perm: 'reviewRecordings',
+      crumbs: () => [N.t('nav.workspace'), N.t('nav.review')], render, click });
+  })();
+  </script>
+</body>
+</html>

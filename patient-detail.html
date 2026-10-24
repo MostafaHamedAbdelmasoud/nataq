@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Patient — Nataq</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .p-header { background: var(--surface); border: 1px solid var(--rule); border-radius: 16px; padding: 22px; display: flex; gap: 18px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+    .p-header .grow { flex: 1; min-width: 220px; }
+    .p-name { font-size: 22px; font-weight: 700; margin: 0 0 6px; }
+    .p-meta { display: flex; gap: 12px; font-size: 13px; color: var(--ink-3); align-items: center; flex-wrap: wrap; }
+    .p-stats { display: flex; gap: 22px; padding-inline-start: 22px; border-inline-start: 1px solid var(--rule); }
+    .p-stat-v { font-size: 20px; font-weight: 700; }
+    .p-stat-l { font-size: 11px; color: var(--ink-3); }
+    @media (max-width: 760px) { .p-stats { padding: 0; border: 0; width: 100%; justify-content: space-between; } }
+    .cp-head { padding: 20px; background: linear-gradient(100deg, #EEF0FF 0%, #F7F8FC 100%); display: flex; gap: 18px; align-items: center; border-bottom: 1px solid var(--rule); flex-wrap: wrap; border-radius: 14px 14px 0 0; }
+    .cp-letter { width: 64px; height: 64px; border-radius: 16px; background: #fff; border: 1px solid var(--rule); display: grid; place-items: center; font-family: 'IBM Plex Sans Arabic', sans-serif; font-weight: 700; font-size: 32px; color: var(--indigo-600); }
+    .cp-eyebrow { font-size: 11px; color: var(--indigo-600); font-weight: 700; letter-spacing: .05em; }
+    .cp-title { font-size: 19px; font-weight: 700; margin: 2px 0 8px; }
+    .letter-grid { display: flex; flex-wrap: wrap; gap: 8px; padding: 18px 20px; }
+    .lg { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-family: 'IBM Plex Sans Arabic', sans-serif; font-weight: 700; font-size: 20px; border: 1px solid var(--rule); position: relative; }
+    .lg.done { background: var(--mint-50); border-color: #A7F3D0; color: #047857; }
+    .lg.active { background: var(--indigo-50); border-color: var(--indigo); color: var(--indigo-600); }
+    .tl { padding: 8px 20px 16px; }
+    .tl-item { display: grid; grid-template-columns: 30px 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px dashed var(--rule); }
+    .tl-item:last-child { border-bottom: 0; }
+    .tl-dot { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--indigo-50); color: var(--indigo-600); }
+    .tl-dot.mint { background: var(--mint-50); color: #047857; }
+    .tl-dot.amber { background: var(--amber-50); color: #B45309; }
+    .tl-title { font-size: 13px; font-weight: 600; }
+    .tl-meta { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+    .rec-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--rule); }
+    .rec-item:last-child { border-bottom: 0; }
+    .rec-item .audio-row { max-width: 360px; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="main">
+      <header class="topbar" id="topbar"></header>
+      <div class="content" id="content"></div>
+    </main>
+  </div>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+  <script src="chat.js"></script>
+  <script>
+  (function () {
+    const N = Nataq;
+    const TABS = ['overview', 'sessions', 'chat', 'recordings', 'notes'];
+    const st = { tab: TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'overview', recFilter: 'all' };
+    const pid = N.param('id') || 'p1';
+    const P = () => N.getPatient(pid);
+
+    function render() {
+      const { t, esc, L, icon, avatar } = N;
+      const p = P(), box = document.getElementById('content');
+      if (!p) { box.innerHTML = `<div class="card">${N.empty('users', t('pd.notFound'), t('pd.notFoundSub'))}<div style="text-align:center;padding-bottom:30px"><a class="btn btn-primary" href="patients.html">${t('common.back')}</a></div></div>`; return; }
+      const pr = N.getProgram(p.programId), ses = N.sessionsOf(p), msgs = N.msgsOf(p.id);
+      const sent = msgs.filter(N.isAttempt), replies = msgs.filter(m => m.from === 'therapist'), w = N.waitingOf(p.id);
+      const judged = sent.filter(m => m.status === 'approved' || m.status === 'retry');
+      const rate = judged.length ? Math.round(judged.filter(m => m.status === 'approved').length / judged.length * 100) : 0;
+      const counts = { overview: '', sessions: ses.length, chat: msgs.filter(m => m.from !== 'system').length, recordings: sent.length, notes: p.notes ? '✓' : '' };
+
+      let banner = '';
+      if (p.status === 'inactive') banner = `<div class="banner rose">${icon('userx', 'icon-sm')}<span class="grow">${t('pd.bannerInactive')}</span>${N.can('deleteUsers') ? `<button class="btn btn-secondary btn-sm" data-act="activate">${t('patients.activate')}</button>` : ''}</div>`;
+      else if (p.status === 'paused') banner = `<div class="banner amber">${icon('pausec', 'icon-sm')}<span class="grow">${t('pd.bannerPaused')}</span><button class="btn btn-secondary btn-sm" data-act="resume">${t('patients.resume')}</button></div>`;
+      else if (p.status === 'finished') banner = `<div class="banner mint">${icon('star', 'icon-sm')}<span class="grow">${t('pd.bannerFinished', { prog: esc(L(pr)) })}</span><button class="btn btn-primary btn-sm" data-act="changeProg">${t('pd.assignNext')}</button></div>`;
+      else if (N.isReady(p)) banner = `<div class="banner indigo">${icon('unlock', 'icon-sm')}<span class="grow">${t('pd.bannerReady', { n: p.current })}</span><button class="btn btn-primary btn-sm" data-act="unlock">${t(p.current >= ses.length ? 'pd.finishProgram' : 'pd.unlockNext')}</button></div>`;
+      else if (w.length) banner = `<div class="banner amber">${icon('clock', 'icon-sm')}<span class="grow">${t('review.waitingBanner', { n: w.length })}</span><a class="btn btn-primary btn-sm" href="review.html?p=${p.id}">${t('pd.reviewNow')}</a></div>`;
+
+      box.innerHTML = `
+        <div class="p-header">
+          ${avatar(p, 'avatar-xl')}
+          <div class="grow">
+            <h1 class="p-name">${esc(L(p))}</h1>
+            <div class="p-meta">${N.patientBadge(p)}<span>${t('common.age', { n: p.age })}</span><span dir="ltr">${esc(p.phone)}</span>
+              ${L(p.guardian) ? `<span>${t('field.guardian')}: ${esc(L(p.guardian))}</span>` : ''}<span>${t('pd.since', { d: N.fmtDate(p.since) })}</span></div>
+            <div class="flex gap-2 mt-3" style="flex-wrap:wrap">
+              ${N.can('reviewRecordings') ? `<a class="btn btn-secondary btn-sm" href="review.html?p=${p.id}">${icon('chat', 'icon-sm')}${t('patients.openChat')}</a>` : ''}
+              <button class="btn btn-secondary btn-sm ${N.can('editPatients') ? '' : 'is-locked'}" data-act="edit">${icon(N.can('editPatients') ? 'edit' : 'lock', 'icon-sm')}${t('pd.editProfile')}</button>
+              ${p.status === 'active' ? `<button class="btn btn-secondary btn-sm" data-act="remind">${icon('bell', 'icon-sm')}${t('patients.remind')}</button>` : ''}
+              ${N.lastReminder(p.id) ? `<span class="text-xs muted" style="align-self:center">${t('pd.lastReminder', { t: N.rel(N.lastReminder(p.id).ts) })}</span>` : ''}
+            </div>
+          </div>
+          <div class="p-stats">
+            <div><div class="p-stat-v">${sent.length}</div><div class="p-stat-l">${t('pd.statSent')}</div></div>
+            <div><div class="p-stat-v">${replies.length}</div><div class="p-stat-l">${t('pd.statReplies')}</div></div>
+            <div><div class="p-stat-v" style="color:${w.length ? '#B45309' : 'inherit'}">${w.length}</div><div class="p-stat-l">${t('status.waiting')}</div></div>
+            <div><div class="p-stat-v">${rate}%</div><div class="p-stat-l">${t('pd.statRate')}</div></div>
+          </div>
+        </div>
+        ${banner}
+        <div class="tabs" role="tablist">
+          ${TABS.map(k => `<button class="tab ${st.tab === k ? 'active' : ''}" role="tab" data-tab="${k}">${t('pd.tab.' + k)}${counts[k] !== '' ? `<span class="tab-count">${counts[k]}</span>` : ''}</button>`).join('')}
+        </div>
+        <div id="panel"></div>`;
+      renderPanel();
+    }
+
+    function renderPanel() {
+      const p = P(), el = document.getElementById('panel');
+      if (window._pdChat) { window._pdChat.destroy(); window._pdChat = null; }
+      el.innerHTML = { overview, sessions, chat: chatTab, recordings, notes }[st.tab](p);
+      if (st.tab === 'chat') { window._pdChat = NataqChat.create(document.getElementById('pdChat'), { pid: p.id, viewer: 'staff', onChange: () => N.refreshShell(), onUnlock: () => { if (!N.need('unlockSessions')) return; N.unlockNext(p.id); N.toast(N.t('toast.sessionUnlocked'), '', 'success'); render(); } }); window._pdChat.render(); }
+    }
+
+    function sessionRows(p, limit) {
+      const { t, esc, L, icon } = N, ses = N.sessionsOf(p), msgs = N.msgsOf(p.id);
+      const canU = N.can('unlockSessions');
+      let list = ses.map((s, i) => ({ s, n: i + 1 }));
+      if (limit) { const c = Math.min(p.current, ses.length); list = list.filter(x => Math.abs(x.n - c) <= 2); }
+      return list.map(({ s, n }) => {
+        const done = p.status === 'finished' || n < p.current, cur = !done && n === p.current, locked = !done && !cur;
+        const att = msgs.filter(m => N.isAttempt(m) && m.session === n && m.prog === p.programId);
+        const w = att.filter(m => m.status === 'waiting').length;
+        let actions = '';
+        if (cur && p.status !== 'inactive') {
+          if (w && N.can('reviewRecordings')) actions += `<a class="btn btn-primary btn-sm" href="review.html?p=${p.id}">${t('pd.reviewNow')}</a>`;
+          if (p.current > 1) actions += `<button class="btn btn-ghost btn-sm ${canU ? '' : 'is-locked'}" data-act="relock" title="${t('pd.relockHint')}">${icon('lock', 'icon-sm')}${t('pd.relock')}</button>`;
+        }
+        if (n === p.current + 1 && p.status !== 'finished' && p.status !== 'inactive') actions += `<button class="btn ${canU ? 'btn-secondary' : 'btn-secondary is-locked'} btn-sm" data-act="unlock">${icon(canU ? 'unlock' : 'lock', 'icon-sm')}${t('pd.unlockThis')}</button>`;
+        if (n === ses.length && cur && p.status === 'active') actions += `<button class="btn btn-secondary btn-sm ${canU ? '' : 'is-locked'}" data-act="unlock">${icon('star', 'icon-sm')}${t('pd.finishProgram')}</button>`;
+        if (done && n === ses.length && p.status === 'finished') actions += `<button class="btn btn-ghost btn-sm ${canU ? '' : 'is-locked'}" data-act="relock">${icon('lock', 'icon-sm')}${t('pd.reopen')}</button>`;
+        return `<div class="session-row ${locked ? 'locked' : ''}">
+          <div class="session-num ${done ? 'done' : cur ? 'current' : 'locked'}">${done ? icon('check', 'icon-sm') : locked ? icon('lock', 'icon-sm') : n}</div>
+          <div style="min-width:0"><div class="session-title">${t('common.sessionN', { n })} · ${esc(L(s))} <span class="ar-letter">${esc(s.letter)}</span></div>
+            <div class="session-meta">${done ? t('pd.sDone') : cur ? t('pd.sCurrent') : t('pd.sLocked')} · ${t('pd.attemptsN', { n: att.length })}
+              ${w ? N.waitingLabel(w) : ''} ${N.videoChip(s)}</div></div>
+          <div class="session-actions">${actions}</div>
+        </div>`;
+      }).join('');
+    }
+
+    function overview(p) {
+      const { t, esc, L, icon } = N, pr = N.getProgram(p.programId), ses = N.sessionsOf(p), cs = N.currentSession(p), v = N.pct(p);
+      const msgs = N.msgsOf(p.id).slice(-6).reverse();
+      const doneLetters = new Set(ses.slice(0, p.status === 'finished' ? ses.length : p.current - 1).filter((s, i, a) => a.filter(x => x.letter === s.letter).length >= ses.filter(x => x.letter === s.letter).length).map(s => s.letter));
+      const daysLeft = p.status === 'active' ? Math.max(1, Math.round((ses.length - p.current + 1) * 2.5)) : 0;
+      return `<div class="detail-grid">
+        <div class="stack">
+          <section class="card" style="overflow:visible">
+            <div class="cp-head">
+              <div class="cp-letter">${esc(cs ? cs.letter : pr.letters[0])}</div>
+              <div style="flex:1;min-width:200px">
+                <div class="cp-eyebrow">${t('pd.currentProgram')}</div>
+                <h2 class="cp-title">${esc(L(pr))}</h2>
+                <div class="flex items-center gap-3" style="flex-wrap:wrap"><div style="width:220px;max-width:100%">${N.progressBar(v, v === 100 ? 'mint' : '')}</div>
+                  <span class="text-sm font-semibold">${p.status === 'finished' ? t('status.finished') : t('common.sessionOf', { n: p.current, m: ses.length })}</span></div>
+              </div>
+              <button class="btn btn-secondary btn-sm" data-tab="sessions">${t('pd.allSessions')}</button>
+            </div>
+            ${sessionRows(p, true)}
+          </section>
+          <section class="card">
+            <div class="card-head"><div class="card-title">${t('pd.activity')}</div><button class="btn btn-ghost btn-sm" data-tab="chat">${t('pd.openChat')}</button></div>
+            <div class="tl">${msgs.length ? msgs.map(m => {
+              const cls = N.isAttempt(m) ? (m.status === 'waiting' ? 'amber' : '') : 'mint';
+              const ic = N.isAttempt(m) ? 'mic' : m.from === 'system' ? N.sysIcon(m) : 'chat';
+              const title = m.from === 'patient' ? (N.isAttempt(m) ? t('pd.tlSent', { l: esc(m.letter) }) : t('pd.tlText', { name: esc(N.L(p)) })) : m.from === 'system' ? N.sysText(m) : t('pd.tlReplied', { name: esc(N.authorName(m.by)) });
+              return `<div class="tl-item"><div class="tl-dot ${cls}">${N.icon(ic, 'icon-sm')}</div><div><div class="tl-title">${title}</div>
+                <div class="tl-meta">${N.rel(m.ts)}${m.session ? ' · ' + t('common.sessionN', { n: m.session }) : ''} ${N.isAttempt(m) ? N.verdictBadge(m) : ''}</div>
+                ${m.type === 'text' ? `<div class="text-sm mt-2" style="color:var(--ink-2)">${N.msgText(m)}</div>` : ''}
+                ${m.type === 'audio' ? `<div class="mt-2" style="max-width:320px">${N.audioHTML(m.id, m.audio, m.dur, 22)}</div>` : ''}</div></div>`; }).join('') : N.empty('mic', t('pd.noActivity'), '')}</div>
+          </section>
+        </div>
+        <div class="stack">
+          ${p.notes ? `<div class="note-box"><strong>${t('pd.clinicalNote')}:</strong> ${esc(p.notes.length > 180 ? p.notes.slice(0, 180) + '…' : p.notes)}
+            <div class="mt-2"><button class="btn btn-ghost btn-sm" data-tab="notes">${icon('edit', 'icon-sm')}${t('common.edit')}</button></div></div>` : ''}
+          <section class="card">
+            <div class="card-head"><div class="card-title">${t('pd.programProgress')}</div></div>
+            <div style="display:flex;justify-content:center;padding:22px">${N.ring(v, v === 100 ? '#14C9A1' : '#5D5FEF', 150)}</div>
+            <div class="text-sm muted" style="text-align:center;padding:0 20px 20px">${p.status === 'active' ? t('pd.eta', { n: daysLeft }) : t('status.' + p.status)}</div>
+          </section>
+          <section class="card">
+            <div class="card-head"><div class="card-title">${t('pd.letters')}</div><span class="text-xs muted">${t('pd.lettersHint')}</span></div>
+            <div class="letter-grid">${pr.letters.map(l => `<div class="lg ${doneLetters.has(l) ? 'done' : cs && cs.letter === l && p.status !== 'finished' ? 'active' : ''}" title="${l}">${l}</div>`).join('')}</div>
+          </section>
+          <section class="card">
+            <div class="card-head"><div class="card-title">${t('pd.notifs')}</div></div>
+            <div class="card-body" style="padding:6px 20px">
+              ${['push', 'inapp', 'sms'].map(k => `<div class="pref-row"><span>${t('pd.notif.' + k)}</span>
+                <label class="switch"><input type="checkbox" data-notif="${k}" ${p.notif[k] ? 'checked' : ''} ${N.can('editPatients') ? '' : 'disabled'}><span></span></label></div>`).join('')}
+            </div>
+          </section>
+        </div>
+      </div>`;
+    }
+
+    function sessions(p) {
+      const { t, esc, L, icon } = N, pr = N.getProgram(p.programId);
+      return `<section class="card">
+        <div class="card-head"><div><div class="card-title">${esc(L(pr))}</div><div class="text-xs muted mt-2">${t('pd.sessionsHint')}</div></div>
+          <button class="btn btn-secondary btn-sm ${N.can('editPatients') ? '' : 'is-locked'}" data-act="changeProg">${icon('refresh', 'icon-sm')}${t('pd.changeProgram')}</button></div>
+        ${sessionRows(p, false)}
+      </section>
+      ${p.history.length ? `<section class="card mt-4"><div class="card-head"><div class="card-title">${t('pd.pastPrograms')}</div></div>
+        ${p.history.map(h => `<div class="list-row"><div class="prog-letter" style="background:${N.getProgram(h.programId).bg};color:${N.getProgram(h.programId).fg}">${N.getProgram(h.programId).letters[0]}</div><div class="grow"><div class="list-title">${esc(L(N.getProgram(h.programId)))}</div><div class="list-sub">${t('pd.historyLine', { n: h.reached, d: N.fmtDate(h.at) })}</div></div></div>`).join('')}</section>` : ''}`;
+    }
+
+    function recordings(p) {
+      const { t, esc } = N;
+      const all = N.msgsOf(p.id).filter(N.isAttempt).slice().reverse();
+      const F = ['all', 'waiting', 'approved', 'retry', 'reviewed'];
+      const list = all.filter(m => st.recFilter === 'all' || m.status === st.recFilter);
+      return `<section class="card">
+        <div class="filters-bar"><div class="chips">${F.map(f => `<button class="chip-btn ${st.recFilter === f ? 'active' : ''}" data-rf="${f}">${t(f === 'all' ? 'filter.all' : 'status.' + f)} <span class="n">${f === 'all' ? all.length : all.filter(m => m.status === f).length}</span></button>`).join('')}</div></div>
+        ${list.length ? list.map(m => `<div class="rec-item">
+          <div><div class="text-sm font-semibold mb-2">${t('review.attempt')} · <span class="ar-letter">${esc(m.letter)}</span> · ${t('common.sessionN', { n: m.session })} <span class="muted" style="font-weight:400">· ${N.rel(m.ts)}</span></div>
+            ${N.audioHTML(m.id, m.audio, m.dur)}</div>
+          <div class="flex items-center gap-2">${m.reaction ? `<span class="react-chip">${m.reaction}</span>` : ''}${N.verdictBadge(m)}</div>
+        </div>`).join('') : N.empty('mic', t('common.noResults'), '')}
+      </section>`;
+    }
+
+    function chatTab(p) { return `<section class="card" style="overflow:hidden"><div id="pdChat" class="chat-host"></div></section>`; }
+    function feedback(p) {
+      const { t } = N;
+      const list = N.msgsOf(p.id).filter(m => m.from === 'therapist').slice().reverse();
+      return `<section class="card">
+        <div class="card-head"><div class="card-title">${t('pd.tab.feedback')}</div>${N.can('reviewRecordings') ? `<a class="btn btn-primary btn-sm" href="review.html?p=${p.id}">${N.icon('chat', 'icon-sm')}${t('pd.reply')}</a>` : ''}</div>
+        ${list.length ? list.map(m => `<div class="rec-item"><div>
+          <div class="text-sm font-semibold mb-2">${N.esc(N.authorName(m.by))} <span class="muted" style="font-weight:400">· ${N.rel(m.ts)}</span></div>
+          ${m.type === 'audio' ? N.audioHTML(m.id, m.audio, m.dur) : `<div class="text-sm" style="color:var(--ink-2)">${N.msgText(m)}</div>`}
+        </div><span class="badge badge-neutral">${t(m.type === 'audio' ? 'review.voiceNote' : 'pd.textReply')}</span></div>`).join('') : N.empty('chat', t('pd.noFeedback'), '')}
+      </section>`;
+    }
+
+    function notes(p) {
+      const { t, esc, icon } = N, ok = N.can('editPatients');
+      return `<section class="card">
+        <div class="card-head"><div><div class="card-title">${t('pd.tab.notes')}</div><div class="text-xs muted mt-2">${t('pd.notesHint')}</div></div>
+          <button class="btn ${ok ? 'btn-primary' : 'btn-secondary is-locked'}" data-act="saveNotes">${icon(ok ? 'check' : 'lock', 'icon-sm')}${t('common.save')}</button></div>
+        <div class="card-body"><textarea class="textarea" id="notesTa" rows="10" ${ok ? '' : 'readonly'} placeholder="${t('pd.notesPh')}">${esc(p.notes)}</textarea></div>
+      </section>`;
+    }
+
+    function editModal(p) {
+      const { t, esc, L } = N;
+      N.modal({ title: t('pd.editProfile'), sub: esc(L(p)), body: `
+        <div class="form-grid">
+          <div class="field"><label>${t('field.nameEn')}</label><input class="input" id="eEn" value="${esc(p.en)}" dir="ltr"></div>
+          <div class="field"><label>${t('field.nameAr')}</label><input class="input" id="eAr" value="${esc(p.ar)}" dir="rtl"></div>
+          <div class="field"><label>${t('field.phone')}</label><input class="input" id="ePh" value="${esc(p.phone)}" dir="ltr"></div>
+          <div class="field"><label>${t('field.age')}</label><input class="input" id="eAge" type="number" value="${p.age}"></div>
+        </div>
+        <div class="field"><label>${t('field.guardian')}</label><input class="input" id="eG" value="${esc(L(p.guardian))}"></div>`,
+        actions: [{ label: t('common.cancel') }, { label: t('common.save'), kind: 'primary', onClick: el => {
+          const en = el.querySelector('#eEn').value.trim(), ar = el.querySelector('#eAr').value.trim(), ph = el.querySelector('#ePh').value.trim(), age = parseInt(el.querySelector('#eAge').value, 10);
+          if (!en && !ar) { N.fieldError(el, '#eEn', t('val.name')); return false; }
+          const d = N.digits(ph).replace(/^20/, '');
+          if (d.length < 10) { N.fieldError(el, '#ePh', t('val.phone')); return false; }
+          const other = N.findAccount('patient', ph); if (other && other.id !== p.id) { N.fieldError(el, '#ePh', t('val.phoneTaken')); return false; }
+          if (!(age >= 2 && age <= 99)) { N.fieldError(el, '#eAge', t('val.age')); return false; }
+          const g = el.querySelector('#eG').value.trim();
+          Object.assign(p, { en: en || ar, ar: ar || en, phone: ph, age, guardian: { en: g, ar: g } });
+          N.save(); N.toast(t('toast.saved'), '', 'success'); render();
+        } }] });
+    }
+
+    function changeProgModal(p) {
+      const { t, esc, L } = N;
+      N.modal({ title: t('pd.changeProgram'), sub: t('pd.changeProgramSub'), body: `<div class="field"><label>${t('col.program')}</label>
+        <select class="select" id="cp">${N.db().programs.map(pr => `<option value="${pr.id}" ${pr.id === p.programId && p.status !== 'finished' ? 'selected' : ''}>${esc(L(pr))} — ${pr.letters.join(' ')}</option>`).join('')}</select></div>`,
+        actions: [{ label: t('common.cancel') }, { label: t('common.confirm'), kind: 'primary', onClick: el => {
+          const id = el.querySelector('#cp').value;
+          if (id === p.programId && p.status !== 'finished') { N.toast(t('pd.sameProgram'), '', 'info'); return false; }
+          p.history.unshift({ programId: p.programId, reached: p.status === 'finished' ? N.sessionsOf(p).length : p.current, at: Date.now() });
+          p.programId = id; p.current = 1; if (p.status === 'finished') p.status = 'active';
+          N.addMsg(p.id, { from: 'system', kind: 'unlock', session: 1, prog: id, by: N.me().id });
+          N.save(); N.toast(t('toast.programChanged'), esc(L(N.getProgram(id))), 'success'); render();
+        } }] });
+    }
+
+    function click(e) {
+      const { t } = N, p = P(); if (!p) return;
+      const tb = e.target.closest('[data-tab]');
+      if (tb) { st.tab = tb.dataset.tab; history.replaceState(null, '', '#' + st.tab); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+      const rf = e.target.closest('[data-rf]'); if (rf) { st.recFilter = rf.dataset.rf; renderPanel(); return; }
+      const b = e.target.closest('[data-act]'); if (!b) return;
+      const name = N.esc(N.L(p)), a = b.dataset.act;
+      if (a === 'unlock') { if (!N.need('unlockSessions')) return; const r = N.unlockNext(p.id); N.toast(t(r === 'finished' ? 'toast.programFinished' : 'toast.sessionUnlocked'), t('toast.patientNotified', { name }), 'success'); }
+      if (a === 'relock') { if (!N.need('unlockSessions')) return; N.relock(p.id); N.toast(t('toast.relocked'), t('toast.relockedBody', { n: p.current }), 'success'); }
+      if (a === 'edit') { if (N.need('editPatients')) editModal(p); return; }
+      if (a === 'changeProg') { if (N.need('editPatients')) changeProgModal(p); return; }
+      if (a === 'remind') { if (N.remindToast(p.id) === 'sent') render(); return; }
+      if (a === 'resume') { if (!N.need('editPatients')) return; p.status = 'active'; N.save(); N.toast(t('toast.resumed'), name, 'success'); }
+      if (a === 'activate') { if (!N.need('deleteUsers')) return; p.status = 'active'; N.save(); N.toast(t('toast.activated'), name, 'success'); }
+      if (a === 'saveNotes') { if (!N.need('editPatients')) return; p.notes = document.getElementById('notesTa').value.trim(); N.save(); N.toast(t('toast.notesSaved'), '', 'success'); }
+      N.refreshShell(); render();
+    }
+    function change(e) {
+      const n = e.target.closest('[data-notif]'); if (!n) return;
+      if (!N.need('editPatients')) { n.checked = !n.checked; return; }
+      P().notif[n.dataset.notif] = n.checked; N.save();
+      N.toast(t2(n.checked ? 'toast.notifOn' : 'toast.notifOff'), N.t('pd.notif.' + n.dataset.notif), 'success');
+    }
+    const t2 = k => N.t(k);
+
+    N.boot({ shell: 'staff', nav: 'patients', title: 'nav.patients', roles: ['superadmin', 'assistant'], perm: 'viewPatients',
+      crumbs: () => [{ href: 'patients.html', label: N.t('nav.patients') }, P() ? N.esc(N.L(P())) : '—'], render, click, change });
+  })();
+  </script>
+</body>
+</html>

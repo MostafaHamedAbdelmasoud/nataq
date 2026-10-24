@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Record — Nataq</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .patient-content { padding: 28px 24px 60px; max-width: 860px; margin: 0 auto; }
+    .patient-topbar .ptabs { margin-inline-start: 12px; }
+    @media (max-width: 760px) { .patient-topbar { padding: 12px 16px; gap: 10px; } .patient-topbar .ptabs { order: 3; width: 100%; margin: 0; } .patient-content { padding: 18px 14px 48px; } }
+    .stage { background: var(--navy); color: #fff; border-radius: 22px; padding: 28px 24px 30px; text-align: center; position: relative; overflow: hidden; }
+    .stage::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 500px 300px at 50% 0%, rgba(93,95,239,.35), transparent 70%); pointer-events: none; }
+    .stage > * { position: relative; }
+    .eyebrow { font-size: 11px; letter-spacing: .08em; color: rgba(255,255,255,.55); font-weight: 700; }
+    .stage h1 { font-size: 22px; margin: 6px 0 4px; }
+    .stage .sub { font-size: 14px; color: rgba(255,255,255,.65); margin: 0; }
+    .big-letter { font-family: 'IBM Plex Sans Arabic', sans-serif; font-weight: 700; font-size: 150px; line-height: 1.1; margin: 10px 0 0; color: rgba(255,255,255,.9); transition: transform .2s; }
+    .stage.rec .big-letter { transform: scale(1.06); color: #fff; text-shadow: 0 0 40px rgba(244,63,94,.5); }
+    .meter { display: flex; gap: 4px; justify-content: center; align-items: center; height: 56px; margin: 6px auto 0; max-width: 360px; direction: ltr; }
+    .meter i { flex: 1; height: 8%; background: rgba(255,255,255,.18); border-radius: 3px; transition: height .06s; }
+    .stage.rec .meter i { background: #14C9A1; }
+    .stage.rec.fake .meter i { animation: mdance .5s ease-in-out infinite alternate; }
+    .stage.rec.fake .meter i:nth-child(3n) { animation-duration: .35s; } .stage.rec.fake .meter i:nth-child(4n) { animation-duration: .6s; }
+    @keyframes mdance { from { height: 15%; } to { height: 90%; } }
+    .timer { font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 600; margin-top: 12px; direction: ltr; }
+    .timer small { font-size: 14px; color: rgba(255,255,255,.5); }
+    .tbar { height: 6px; background: rgba(255,255,255,.1); border-radius: 999px; max-width: 320px; margin: 10px auto 0; overflow: hidden; direction: ltr; }
+    .tbar div { height: 100%; width: 0; background: var(--rose); border-radius: 999px; }
+    .rec-btn { width: 88px; height: 88px; border-radius: 50%; margin: 20px auto 0; background: var(--rose); border: 5px solid rgba(255,255,255,.18); display: grid; place-items: center; box-shadow: 0 20px 40px -10px rgba(244,63,94,.55); transition: transform .15s; }
+    .rec-btn:hover { transform: scale(1.05); }
+    .rec-btn .inner { width: 30px; height: 30px; background: #fff; border-radius: 50%; transition: border-radius .2s, width .2s, height .2s; }
+    .stage.rec .rec-btn .inner { border-radius: 6px; width: 26px; height: 26px; }
+    .rec-btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+    .hint-line { margin-top: 14px; font-size: 13px; color: rgba(255,255,255,.6); }
+    .tip { margin-top: 18px; display: inline-flex; gap: 8px; align-items: flex-start; text-align: start; padding: 10px 14px; border-radius: 12px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); font-size: 13px; color: rgba(255,255,255,.8); max-width: 520px; }
+    .tip b { color: #14C9A1; }
+    .attempt { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 12px; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--rule); }
+    .attempt:last-child { border-bottom: 0; }
+    .attempt .audio-row { max-width: 380px; }
+    .attempt-meta { font-size: 12px; color: var(--ink-3); margin-bottom: 6px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .attempt-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+    @media (max-width: 560px) { .attempt { grid-template-columns: 1fr; } .attempt-actions { justify-content: flex-start; } }
+  </style>
+</head>
+<body>
+  <header class="patient-topbar" id="ptopbar"></header>
+  <div class="patient-content" id="content"></div>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+  <script>
+  (function () {
+    const N = Nataq;
+    const BARS = 24;
+
+    function render() {
+      const { t, esc, L, icon } = N;
+      const p = N.me(), cs = N.currentSession(p), pr = N.getProgram(p.programId);
+      const blocked = p.status !== 'active';
+      document.getElementById('content').innerHTML = `
+        <div class="stage ${N.Recorder.busy ? 'rec' : ''}" id="stage">
+          <div class="eyebrow">${esc(L(pr))} · ${t('common.sessionOf', { n: p.current, m: N.sessionsOf(p).length })}</div>
+          <h1>${t('rec.say', { l: '<span class="ar">' + esc(cs.letter) + '</span>' })}</h1>
+          <p class="sub">${esc(L(cs))}</p>
+          <div class="big-letter ar">${esc(cs.letter)}</div>
+          <div class="meter" id="meter">${'<i></i>'.repeat(BARS)}</div>
+          <div class="timer"><span id="timer">0.0</span><small> / ${N.MAX_REC}.0 ${t('rec.sec')}</small></div>
+          <div class="tbar"><div id="tbar"></div></div>
+          <button class="rec-btn" id="recBtn" ${blocked ? 'disabled' : ''} aria-label="${t('rec.start')}"><span class="inner"></span></button>
+          <div class="hint-line" id="hint">${blocked ? t(p.status === 'finished' ? 'rec.blockedFinished' : 'rec.blockedPaused') : t('rec.hint')}</div>
+          <div class="tip">${icon('info', 'icon-sm')}<span><b>${t('rec.tip')}</b> ${t('rec.tipBody', { l: esc(cs.letter) })}</span></div>
+        </div>
+
+        <section class="card mt-6">
+          <div class="card-head"><div><div class="card-title">${t('rec.drafts')}</div><div class="text-xs muted mt-2">${t('rec.draftsSub')}</div></div><span class="badge badge-indigo" id="draftCount"></span></div>
+          <div id="drafts"></div>
+        </section>
+
+        <section class="card mt-6">
+          <div class="card-head"><div><div class="card-title">${t('rec.sent')}</div><div class="text-xs muted mt-2">${t('rec.sentSub')}</div></div></div>
+          <div id="sent"></div>
+        </section>`;
+      document.getElementById('recBtn').onclick = toggle;
+      renderDrafts(); renderSent();
+    }
+
+    function renderDrafts() {
+      const { t, icon } = N, p = N.me(), list = N.getDrafts(p.id).slice().reverse();
+      document.getElementById('draftCount').textContent = list.length;
+      document.getElementById('drafts').innerHTML = list.length ? list.map((d, i) => `
+        <div class="attempt">
+          <div><div class="attempt-meta"><span class="font-semibold" style="color:var(--ink)">${t('rec.take', { n: list.length - i })}</span><span>${N.fmtTime(d.ts)}</span>
+            <span class="badge badge-neutral">${t('rec.notSent')}</span>${d.real ? '' : `<span class="badge badge-amber">${t('rec.sample')}</span>`}</div>
+            ${N.audioHTML(d.id, d.src, d.dur)}</div>
+          <div class="attempt-actions">
+            <button class="btn btn-ghost btn-sm" data-del="${d.id}" style="color:var(--rose)">${icon('trash', 'icon-sm')}${t('common.delete')}</button>
+            <button class="btn btn-primary btn-sm" data-send="${d.id}" ${p.status !== 'active' ? 'disabled' : ''}>${icon('send', 'icon-sm')}${t('rec.send')}</button>
+          </div>
+        </div>`).join('') : N.empty('mic', t('rec.noDrafts'), t('rec.noDraftsSub'));
+    }
+
+    function renderSent() {
+      const { t, esc } = N, p = N.me();
+      const list = N.msgsOf(p.id).filter(m => N.isAttempt(m) && m.prog === p.programId && m.session === p.current).slice().reverse();
+      const all = N.msgsOf(p.id);
+      document.getElementById('sent').innerHTML = list.length ? list.map(m => {
+        const reply = all.find(x => x.from === 'therapist' && x.replyTo === m.id) || all.slice(all.indexOf(m) + 1).find(x => x.from === 'therapist' && x.session === m.session);
+        return `<div class="attempt">
+          <div><div class="attempt-meta"><span>${N.rel(m.ts)}</span>${N.verdictBadge(m)}${m.reaction ? `<span class="react-chip" title="${t('rec.reaction')}">${m.reaction}</span>` : ''}</div>
+            ${N.audioHTML(m.id, m.audio, m.dur)}
+            ${reply && m.status !== 'waiting' ? `<div class="text-xs muted mt-2">↳ ${esc(N.authorName(reply.by))}: ${reply.type === 'audio' ? t('review.voiceNote') : N.msgText(reply)}</div>` : ''}</div>
+          <div><a class="btn btn-ghost btn-sm" href="patient-chat.html?s=${m.session}">${N.icon('chat', 'icon-sm')}${t('ph.openChat')}</a></div>
+        </div>`; }).join('') : N.empty('send', t('rec.noSent'), '');
+    }
+
+    async function toggle() {
+      const { t } = N, p = N.me();
+      if (N.Recorder.busy) { N.Recorder.stop(); return; }
+      if (p.status !== 'active') return;
+      N.Player.stop();
+      const stage = document.getElementById('stage'), meter = document.querySelectorAll('#meter i');
+      const timer = document.getElementById('timer'), tbar = document.getElementById('tbar'), hint = document.getElementById('hint');
+      hint.textContent = t('rec.askMic');
+      const res = await N.Recorder.start({
+        onStart: real => {
+          stage.classList.add('rec'); stage.classList.toggle('fake', !real);
+          hint.textContent = t('rec.recording');
+          if (!real) N.toast(t('rec.noMic'), t('rec.noMicBody'), 'info');
+        },
+        onTick: s => { timer.textContent = s.toFixed(1); tbar.style.width = (s / N.MAX_REC * 100) + '%'; },
+        onLevel: data => { meter.forEach((b, i) => { const v = data[Math.floor(i * data.length / meter.length)] / 255; b.style.height = Math.max(8, v * 100) + '%'; }); }
+      });
+      stage.classList.remove('rec', 'fake');
+      meter.forEach(b => { b.style.height = ''; });
+      timer.textContent = '0.0'; tbar.style.width = '0';
+      hint.textContent = t('rec.hint');
+      if (!res) return;
+      if (res.dur < 0.4) { N.toast(t('rec.tooShort'), t('rec.tooShortBody'), 'error'); return; }
+      const drafts = N.getDrafts(p.id);
+      const d = { id: N.uid('d'), pid: p.id, src: res.src, dur: res.dur, ts: Date.now(), real: res.real };
+      if (!N.setDrafts(p.id, drafts.concat(d).slice(-5))) return;
+      N.toast(t('rec.saved'), t('rec.savedBody', { s: res.dur.toFixed(1) }), 'success', { label: t('audio.play'), fn: () => N.Player.toggle(d.id) });
+      renderDrafts();
+    }
+
+    function click(e) {
+      const { t } = N, p = N.me();
+      const del = e.target.closest('[data-del]');
+      if (del) { N.Player.stop(); N.setDrafts(p.id, N.getDrafts(p.id).filter(d => d.id !== del.dataset.del)); N.toast(t('toast.deleted'), '', 'success'); renderDrafts(); return; }
+      const snd = e.target.closest('[data-send]');
+      if (snd) {
+        const d = N.getDrafts(p.id).find(x => x.id === snd.dataset.send); if (!d) return;
+        N.Player.stop();
+        if (!N.patientSend(p.id, { audio: d.src, dur: d.dur })) return;
+        N.setDrafts(p.id, N.getDrafts(p.id).filter(x => x.id !== d.id));
+        N.toast(t('rec.sentToast'), t('rec.sentToastBody'), 'success');
+        renderDrafts(); renderSent();
+      }
+    }
+
+    N.boot({ shell: 'patient', nav: 'record', title: 'ph.navRecord', roles: ['patient'], render, click });
+  })();
+  </script>
+</body>
+</html>

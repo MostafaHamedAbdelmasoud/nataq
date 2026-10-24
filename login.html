@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign in — Nataq</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .hero-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .hero-brand { display: flex; align-items: center; gap: 12px; }
+    .hero-brand .brand-mark { width: 44px; height: 44px; font-size: 18px; }
+    .hero-brand-name { font-weight: 700; font-size: 20px; }
+    .hero-brand-tag { font-size: 12px; color: rgba(255,255,255,.6); }
+    .auth-hero .lang-switch { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.14); margin: 0; }
+    .auth-hero .lang-btn { color: rgba(255,255,255,.65); }
+    .auth-hero .lang-btn.active { background: rgba(255,255,255,.16); color: #fff; box-shadow: none; }
+    .hero-middle { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 40px 0; }
+    .hero-eyebrow { font-size: 13px; color: rgba(255,255,255,.65); margin-bottom: 18px; display: inline-flex; align-items: center; gap: 10px; }
+    .hero-eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: #14C9A1; box-shadow: 0 0 0 4px rgba(20,201,161,.2); }
+    .hero-headline { font-size: 42px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; margin: 0 0 18px; }
+    .hero-headline em { font-style: normal; background: linear-gradient(90deg, #8B8DF8, #14C9A1); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .hero-desc { font-size: 15px; color: rgba(255,255,255,.72); line-height: 1.6; max-width: 440px; margin: 0; }
+    .artic-grid { margin-top: 36px; display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; max-width: 460px; }
+    .artic-tile { aspect-ratio: 1; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.09); border-radius: 12px; display: grid; place-items: center; font-family: 'IBM Plex Sans Arabic', sans-serif; font-weight: 700; font-size: 22px; }
+    .artic-tile.featured { background: linear-gradient(135deg, rgba(93,95,239,.45), rgba(139,92,246,.2)); border-color: rgba(93,95,239,.55); }
+    .hero-bottom { display: flex; gap: 32px; padding-top: 22px; border-top: 1px solid rgba(255,255,255,.08); }
+    .hero-stat-value { font-size: 22px; font-weight: 700; }
+    .hero-stat-label { font-size: 12px; color: rgba(255,255,255,.55); margin-top: 2px; }
+    @media (max-width: 900px) { .auth-hero { padding: 28px; } .hero-middle { padding: 24px 0; } .hero-headline { font-size: 30px; } .artic-grid, .hero-bottom { display: none; } .auth-form-side { padding: 28px 20px; } }
+
+    .auth-form h1 { font-size: 26px; font-weight: 700; margin: 0 0 6px; }
+    .subhead { color: var(--ink-3); font-size: 14px; margin: 0 0 24px; }
+    .role-switch { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; background: var(--surface-2); border: 1px solid var(--rule); border-radius: 12px; margin-bottom: 8px; }
+    .role-switch button { border: 0; background: transparent; padding: 10px 6px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--ink-3); display: flex; align-items: center; justify-content: center; gap: 6px; font-family: inherit; }
+    .role-switch button.active { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(15,21,53,.1); }
+    .role-desc { font-size: 12px; color: var(--ink-3); margin: 0 0 22px; min-height: 18px; }
+    .code-row { display: flex; gap: 8px; }
+    .code-row .input { flex: 1; letter-spacing: .3em; font-family: 'JetBrains Mono', monospace; }
+    .demo-box { margin-top: 22px; padding: 14px 16px; background: var(--indigo-50); border: 1px solid #D4D3FD; border-radius: 12px; font-size: 13px; color: var(--ink-2); line-height: 1.6; }
+    .demo-box b { color: var(--ink); }
+    .demo-box code { font-family: 'JetBrains Mono', monospace; background: #fff; border: 1px solid #D4D3FD; padding: 1px 6px; border-radius: 5px; font-size: 12px; direction: ltr; display: inline-block; }
+    .demo-fill { margin-top: 8px; }
+    .signed-in { padding: 12px 14px; border-radius: 12px; background: var(--mint-50); border: 1px solid #A7F3D0; color: #065F46; font-size: 13px; display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <div class="auth-shell" id="content"></div>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+  <script>
+  (function () {
+    const N = Nataq;
+    const ROLES = {
+      superadmin: { icon: 'shield', phone: '100 111 2222' },
+      assistant: { icon: 'users', phone: '109 234 5678' },
+      patient: { icon: 'mic', phone: '101 234 5678' }
+    };
+    let role = 'superadmin';
+    let codeSent = false;
+
+    function render() {
+      const t = N.t, r = ROLES[role], s = N.session(), cur = s && N.me();
+      document.getElementById('content').innerHTML = `
+        <aside class="auth-hero">
+          <div class="hero-top">
+            <div class="hero-brand">
+              <div class="brand-mark">ن</div>
+              <div><div class="hero-brand-name">${t('brand.name')}</div><div class="hero-brand-tag">${t('brand.tag')}</div></div>
+            </div>
+            <div class="lang-switch">
+              <button class="lang-btn ${N.getLang() === 'en' ? 'active' : ''}" data-lang="en">EN</button>
+              <button class="lang-btn ar ${N.getLang() === 'ar' ? 'active' : ''}" data-lang="ar">العربية</button>
+            </div>
+          </div>
+          <div class="hero-middle">
+            <div class="hero-eyebrow"><span class="dot"></span>${t('login.eyebrow')}</div>
+            <h1 class="hero-headline">${t('login.head1')} <em>${t('login.head2')}</em> ${t('login.head3')}</h1>
+            <p class="hero-desc">${t('login.heroDesc')}</p>
+            <div class="artic-grid">
+              ${['ب','ت','ر','س','ش','ع','ك','ل','م','ن','ه','ي'].map(l => `<div class="artic-tile ${l === 'ر' ? 'featured' : ''}">${l}</div>`).join('')}
+            </div>
+          </div>
+          <div class="hero-bottom">
+            <div><div class="hero-stat-value">6</div><div class="hero-stat-label">${t('login.statPrograms')}</div></div>
+            <div><div class="hero-stat-value">3</div><div class="hero-stat-label">${t('login.statRoles')}</div></div>
+            <div><div class="hero-stat-value">${t('login.statMaxVal')}</div><div class="hero-stat-label">${t('login.statMax')}</div></div>
+          </div>
+        </aside>
+
+        <main class="auth-form-side">
+          <form class="auth-form" id="loginForm" novalidate>
+            ${cur ? `<div class="signed-in"><span>${t('login.signedInAs', { name: N.esc(N.L(cur)) })}</span>
+              <span class="flex gap-2"><a class="btn btn-mint btn-sm" href="${N.homeFor(s.role)}">${t('login.continue')}</a>
+              <button type="button" class="btn btn-secondary btn-sm" data-signout>${t('auth.signOut')}</button></span></div>` : ''}
+            <h1>${t('login.title')}</h1>
+            <p class="subhead">${t('login.subhead')}</p>
+
+            <div class="role-switch" role="tablist">
+              ${Object.keys(ROLES).map(k => `<button type="button" role="tab" aria-selected="${k === role}" class="${k === role ? 'active' : ''}" data-role="${k}">${N.icon(ROLES[k].icon, 'icon-sm')}${t('role.' + k)}</button>`).join('')}
+            </div>
+            <p class="role-desc">${t('login.desc.' + role)}</p>
+
+            <div class="field">
+              <label for="phone">${t('field.phone')}</label>
+              <div class="input-group">
+                <div class="input-prefix">${N.icon('phone', 'icon-sm')} +20</div>
+                <input id="phone" class="input" type="tel" inputmode="tel" autocomplete="tel" placeholder="10 2345 6789" value="${r.phone}" dir="ltr">
+              </div>
+            </div>
+
+            ${role === 'patient' ? `
+              <div class="field">
+                <label for="secret">${t('login.code')}</label>
+                <div class="code-row">
+                  <input id="secret" class="input" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="one-time-code" dir="ltr">
+                  <button type="button" class="btn btn-secondary" id="sendCode">${t(codeSent ? 'login.resend' : 'login.sendCode')}</button>
+                </div>
+                <div class="hint">${t('login.codeHint')}</div>
+              </div>` : `
+              <div class="field">
+                <label for="secret">${t('field.password')}</label>
+                <input id="secret" class="input" type="password" autocomplete="current-password" placeholder="••••••••" dir="ltr">
+              </div>`}
+
+            <button type="submit" class="btn btn-primary w-full" style="justify-content:center;padding:12px 16px;">
+              ${t('login.signIn')} ${N.icon('arrow', 'icon-sm')}
+            </button>
+
+            <div class="demo-box">
+              <b>${t('login.demoTitle')}</b><br>
+              ${t('field.phone')}: <code>+20 ${r.phone}</code><br>
+              ${role === 'patient' ? t('login.code') + ': <code>' + N.PATIENT_CODE + '</code>' : t('field.password') + ': <code>' + N.STAFF_PASSWORD + '</code>'}
+              <div class="demo-fill"><button type="button" class="btn btn-secondary btn-sm" id="fillDemo">${N.icon('key', 'icon-sm')}${t('login.fillDemo')}</button></div>
+              <div class="hint mt-2">${t('login.demoHint')}</div>
+            </div>
+          </form>
+        </main>`;
+
+      document.querySelectorAll('[data-role]').forEach(b => b.onclick = () => { role = b.dataset.role; codeSent = false; render(); });
+      const sc = document.getElementById('sendCode');
+      if (sc) sc.onclick = () => {
+        const acc = N.findAccount('patient', document.getElementById('phone').value);
+        if (!acc) { N.toast(t('login.noAccount'), t('login.noAccountBody'), 'error'); return; }
+        codeSent = true; sc.textContent = t('login.resend');
+        N.toast(t('login.codeSent'), t('login.codeSentBody', { code: N.PATIENT_CODE }), 'info');
+      };
+      document.getElementById('fillDemo').onclick = () => {
+        document.getElementById('phone').value = r.phone;
+        document.getElementById('secret').value = role === 'patient' ? N.PATIENT_CODE : N.STAFF_PASSWORD;
+      };
+      document.getElementById('loginForm').onsubmit = e => { e.preventDefault(); submit(); };
+    }
+
+    function submit() {
+      const t = N.t;
+      const phone = document.getElementById('phone').value, secret = document.getElementById('secret').value.trim();
+      if (N.digits(phone).length < 9) { N.fieldError(document, '#phone', t('login.phoneInvalid')); return; }
+      const acc = N.findAccount(role, phone);
+      if (!acc) { N.toast(t('login.noAccount'), t('login.noAccountBody'), 'error'); return; }
+      if (acc.active === false || acc.status === 'inactive') { N.toast(t('auth.deactivated'), t('auth.deactivatedBody'), 'error'); return; }
+      const ok = role === 'patient' ? secret === N.PATIENT_CODE : secret === N.STAFF_PASSWORD;
+      if (!ok) { N.fieldError(document, '#secret', t(role === 'patient' ? 'login.wrongCode' : 'login.wrongPassword')); return; }
+      N.signIn(role, acc.id);
+      N.flash(t('login.welcome', { name: N.L(acc) }), t('role.' + role), 'success');
+      location.href = N.homeFor(role);
+    }
+
+    N.boot({ title: 'login.title', render });
+  })();
+  </script>
+</body>
+</html>
